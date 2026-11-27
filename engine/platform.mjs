@@ -6,17 +6,24 @@ import { basename } from 'node:path';
 export const IS_WIN = process.platform === 'win32';
 const BOOT = Date.now() - uptime() * 1e3;
 const run = (cmd, a) => execFileSync(cmd, a, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+// "node" also means whatever this node binary is called: a versioned or symlinked install shows up under that name.
+const namesOf = image => {
+  const n = image?.replace(/\.exe$/i, '').toLowerCase();
+  return !n ? [] : n === 'node' ? [...new Set([n, basename(process.execPath).replace(/\.exe$/i, '').toLowerCase()])] : [n];
+};
+const commIs = (comm, names) => !names.length || names.some(n => basename(comm.trim()).toLowerCase().slice(0, 15) === n.slice(0, 15));
+const taskIs = (out, names) => !names.length ? out.startsWith('"') : names.some(n => out.startsWith(`"${n}.exe"`));
 
 // A pid recorded before the last boot belongs to nobody. Fast Startup keeps uptime running across a shutdown,
 // so when an image is given the pid must also still be that program; anything else reusing it counts as dead.
 export function alive(pid, startedAt, image) {
   pid = Number(pid);
   if (!(pid > 0) || new Date(startedAt).getTime() < BOOT) return false;
-  const name = image?.replace(/\.exe$/i, '').toLowerCase();
+  const names = namesOf(image);
   try {
-    if (IS_WIN) return run('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH']).toLowerCase().startsWith(name ? `"${name}.exe"` : '"');
+    if (IS_WIN) return taskIs(run('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH']).toLowerCase(), names);
     process.kill(pid, 0);
-    return !name || basename(run('ps', ['-p', String(pid), '-o', 'comm=']).trim()).toLowerCase().slice(0, 15) === name.slice(0, 15);
+    return commIs(run('ps', ['-p', String(pid), '-o', 'comm=']), names);
   } catch { return false; }
 }
 
@@ -26,14 +33,14 @@ export function gone(pid, startedAt, image) {
   pid = Number(pid);
   if (!(pid > 0)) return false;
   if (new Date(startedAt).getTime() < BOOT) return true;
-  const name = image?.replace(/\.exe$/i, '').toLowerCase();
+  const names = namesOf(image);
   try {
     if (IS_WIN) {
       const out = run('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH']).toLowerCase();
-      return out.startsWith('"') ? !!name && !out.startsWith(`"${name}.exe"`) : true;
+      return out.startsWith('"') ? !!names.length && !taskIs(out, names) : true;
     }
     try { process.kill(pid, 0); } catch (e) { return e.code === 'ESRCH'; }
-    return !!name && basename(run('ps', ['-p', String(pid), '-o', 'comm=']).trim()).toLowerCase().slice(0, 15) !== name.slice(0, 15);
+    return !!names.length && !commIs(run('ps', ['-p', String(pid), '-o', 'comm=']), names);
   } catch { return false; }
 }
 

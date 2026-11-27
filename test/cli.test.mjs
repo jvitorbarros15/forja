@@ -219,8 +219,8 @@ test('start launches server and runner, status reads them, stop kills only them'
     assert.equal(await run(['stop', '--project', project], stop.o), 0);
     assert.match(stop.text(), /Stopped server/);
     assert.match(stop.text(), /Stopped runner/);
-    assert.equal(alive(pids.server.pid, pids.server.startedAt, 'node'), false);
-    assert.equal(alive(pids.runner.pid, pids.runner.startedAt, 'node'), false);
+    assert.equal(await gone(pids.server, 5000), true);
+    assert.equal(await gone(pids.runner, 5000), true);
     assert.equal(existsSync(`${state}/pids.json`), false);
     const down = harness({ launch: H.o.launch });
     assert.equal(await run(['stop', '--project', project], down.o), 0);

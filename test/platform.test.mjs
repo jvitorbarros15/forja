@@ -58,9 +58,9 @@ test('killTree ignores invalid pids', () => {
 
 test('spawnDetached appends output to logFile', async () => {
   const dir = tmp(), logFile = join(dir, 'out.log');
-  const child = spawnDetached(process.execPath, ['-e', 'console.log("hello");console.error("oops")'], { logFile });
-  await new Promise(r => child.on('close', r));
-  const log = readFileSync(logFile, 'utf8');
+  spawnDetached(process.execPath, ['-e', 'console.log("hello");console.error("oops")'], { logFile });
+  let log = '';
+  for (let i = 0; i < 100 && !(/hello/.test(log) && /oops/.test(log)); i++) { await new Promise(r => setTimeout(r, 50)); log = readFileSync(logFile, 'utf8'); }
   assert.match(log, /hello/);
   assert.match(log, /oops/);
   rmSync(dir, { recursive: true, force: true });
@@ -92,9 +92,10 @@ test('killOne stops the process and leaves its child alive', async () => {
     for (let i = 0; i < 100 && !existsSync(file); i++) await new Promise(r => setTimeout(r, 50));
     childPid = Number(readFileSync(file, 'utf8'));
     killOne(parent.pid);
-    await new Promise(r => setTimeout(r, 300));
-    assert.equal(alive(parent.pid, new Date(Date.now() - 5000).toISOString(), 'node'), false);
-    assert.equal(alive(childPid, new Date(Date.now() - 5000).toISOString(), 'node'), true);
+    const at = new Date(Date.now() - 5000).toISOString();
+    for (let i = 0; i < 100 && alive(parent.pid, at, 'node'); i++) await new Promise(r => setTimeout(r, 50));
+    assert.equal(alive(parent.pid, at, 'node'), false);
+    assert.equal(alive(childPid, at, 'node'), true);
   } finally { killTree(childPid); killTree(parent.pid); rmSync(dir, { recursive: true, force: true }); }
 });
 
