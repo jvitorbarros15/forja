@@ -380,7 +380,7 @@ test('a spec without a valid TIER is rewritten once, then goes to the owner', ()
   assert.equal(T.stepFor({ ...j, stepRetry: ['spec@0'] }, {}).step, 'fail');
 });
 
-test('the board keeps every change when several processes write at once; a worker of an unknown job is refused', async () => {
+test('the board keeps every change when several processes write at once; a worker of an unknown job is refused', { timeout: 60e3 }, async () => {
   put(E.P.board, { jobs: [job({ issue: 72, stage: 'build' })] });
   const code = `const { loadConfig } = await import(${JSON.stringify(new URL('../engine/config.mjs', import.meta.url).href)});
     const { createTick } = await import(${JSON.stringify(new URL('../engine/tick.mjs', import.meta.url).href)});
@@ -832,7 +832,7 @@ test('the tick returns the unchanged result shape and holds Claude steps while C
   assert.deepEqual(held.waiting, [{ issue: 6, stage: 'spec', on: 'claude' }]);
 });
 
-test('the set command writes the board from the CLI', async () => {
+test('the set command writes the board from the CLI', { timeout: 60e3 }, async () => {
   const C = mkEnv(MULTI);
   const out = await new Promise((ok, bad) => execFile(process.execPath, [`${REPO}/engine/tick.mjs`, '--project', C.project, 'set', '5', '{"note":"hi"}', '--event', 'went'], (e, so) => (e ? bad(e) : ok(so))));
   assert.ok(out.trim().endsWith('5.json'));

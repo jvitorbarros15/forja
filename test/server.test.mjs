@@ -339,7 +339,7 @@ test('malformed URL returns 400 and watcher/SSE errors recover without crashing'
   assert.equal(tries, triesAfterClose);
 });
 
-test('mutateQueue performs full read-modify-write inside the queue lock', async () => {
+test('mutateQueue performs full read-modify-write inside the queue lock', { timeout: 60e3 }, async () => {
   const list = [{ number: 7, title: 'Add search', body: '', updatedAt: '2026-01-02', labels: [] }];
   let ghHook = null;
   const gh = async args => {

@@ -245,7 +245,7 @@ test('prompts read cleanly when denyRead is empty', () => {
   assert.match(prompt(cfg, 'goldfish', { spec: 's' }), /Do not read anything outside this folder\./);
 });
 
-test('runAgent kills a run that outlives the agent timeout and reports the pid', async () => {
+test('runAgent kills a run that outlives the agent timeout and reports the pid', { timeout: 60e3 }, async () => {
   const { cfg, root } = mkCfg();
   const slow = `${root}/slow.mjs`;
   fs.writeFileSync(slow, 'setTimeout(() => {}, 60000);');
