@@ -149,6 +149,19 @@ test('renderAgent fills the placeholders from the config', () => {
   assert.ok(renderAgent(cfg, roles(cfg).approver).body.includes(cfg.commit.guidance));
 });
 
+test('custom reviewer config skills are inlined', () => {
+  const cfg = pluginWithoutSkills(mkCfg());
+  cfg.reviewers.data = { agent: 'review-data.md', skills: ['ponytail-review'] };
+  write(`${cfg.paths.main}/review-data.md`, '---\nname: review-data\n---\nData reviewer.');
+  const home = tmp();
+  write(`${home}/.claude/skills/ponytail-review/SKILL.md`, '---\nname: ponytail-review\n---\nSkill text here.');
+  const { body, skillDirs } = renderAgent(cfg, roles(cfg)['review-data'], home);
+  assert.ok(body.includes('Data reviewer.'));
+  assert.ok(body.includes('## Skill: ponytail-review'));
+  assert.ok(body.includes('Skill text here.'));
+  assert.deepEqual(skillDirs, [`${home}/.claude/skills/ponytail-review`]);
+});
+
 test('renderAgent throws on missing skill', () => {
   const cfg = pluginWithoutSkills(mkCfg());
   assert.throws(() => renderAgent(cfg, roles(cfg)['review-security'], tmp()), /skill security-audit missing for review-security/);

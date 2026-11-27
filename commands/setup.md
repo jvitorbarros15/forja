@@ -18,7 +18,7 @@ Set up Forja for the repo in the current directory. Work through the steps in or
    - Auto-merge: explain that every tier starts at owner approval, so a person approves each change. Auto-merge (`approval: "auto"`) is allowed only on a tier that has `paths`, and the default tier A does. Ask whether to enable it on tier A. Default: no.
    - Auto deploy: ask whether a merged change deploys without an owner click. Default: no. It is allowed only on a tier with `paths`.
    - Deploy commands: `checks.deployTest` and `checks.deploy`. Default: none, which means `merged` is the final state.
-4. Show the final config as a short summary and ask for confirmation once. Then run `node "${CLAUDE_PLUGIN_ROOT}/engine/cli.mjs" init --project "$PWD" --answers '<json>'`, where `<json>` is the answers as one JSON object with the keys above (`repo`, `approvers`, `language`, `vendors`, `models`, `checks`, `tiers`, `deployTest`, `deploy`). Add `--no-gh` if gh is not authenticated.
+4. Show the final config as a short summary and ask for confirmation once. Then write the answers as one JSON object with the keys above (`repo`, `approvers`, `language`, `vendors`, `models`, `checks`, `tiers`, `deployTest`, `deploy`) to a temp file, and run `node "${CLAUDE_PLUGIN_ROOT}/engine/cli.mjs" init --project "$PWD" --answers-file <path>`. Use the file, not inline JSON in quotes. Add `--no-gh` if gh is not authenticated.
 5. Run `node "${CLAUDE_PLUGIN_ROOT}/engine/cli.mjs" doctor --project "$PWD"` and show its result. If a check fails, say what to fix and do not write the config again unless the user asks.
 
-Finish with one line: the config path, and the next step, `/forja:start`.
+Finish by telling the user that `.forja/config.json` must be committed and merged to main by them before the runner uses it, because the runner reads config only from `forja-main`. Claude never commits or pushes during setup. Then the next step is `/forja:start`, after that merge.

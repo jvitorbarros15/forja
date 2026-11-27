@@ -11,7 +11,7 @@ The engine never touches the user's working copy. It works in `<worktreeRoot>/fo
 
 ## Config file
 
-`<repo>/.forja/config.json`. Every key is optional except `repo`. Missing keys come from the defaults in `engine/config.mjs`. Only the keys you change need to appear. Objects merge key by key, but arrays (`tiers`, `paths`, chains, `approvers`) replace the default completely, so copy the whole array when you change one.
+`<repo>/.forja/config.json`. Required keys are `repo` and a non-empty `approvers` list. Every other key is optional. Missing keys come from the defaults in `engine/config.mjs`. Only the keys you change need to appear. Objects merge key by key, but arrays (`tiers`, `paths`, chains, `approvers`) replace the default completely, so copy the whole array when you change one.
 
 ## Tiers
 
@@ -119,14 +119,13 @@ Copy the plugin's template as a starting point, then change only what the projec
     "typecheck": "npm run -s typecheck",
     "test": "npm test",
     "build": null,
-    "ui": null,
     "deployTest": null,
     "deploy": null
   }
 }
 ```
 
-Each command runs in the worktree. `null` skips the check. `checks.ui` is the screenshot command. `deployTest` runs automatically after merge. `deploy` is optional; without it, `merged` is the final state.
+Each command runs in the worktree. `null` skips the check. `deployTest` runs automatically after merge. `deploy` is optional; without it, `merged` is the final state.
 
 ## UI contract
 
@@ -141,7 +140,7 @@ Each command runs in the worktree. `null` skips the check. `checks.ui` is the sc
 }
 ```
 
-A diff that touches `ui.paths` counts as a UI change. Without `ui` or without Playwright, the `ui` review is skipped and the dashboard says why.
+A diff that touches `ui.paths` counts as a UI change. Screenshots are taken with Playwright's chromium, which `/forja:doctor` checks for; `ui.verify` is the command that takes `$BASE_URL` and writes them. Without `ui`, or without Playwright, the `ui` review is skipped and the dashboard says why.
 
 ## Privacy
 
@@ -176,11 +175,11 @@ A diff that touches `ui.paths` counts as a UI change. Without `ui` or without Pl
 - `intakeLabel`: the label that starts a job. Default `forja`.
 - `queue.max`: how many jobs build at once. Default `3`.
 - `limits.rounds`: review rounds before a job goes to `needs-you`. Default `3`.
-- `goldfish`: a model that sees only the spec and the repo and tries to break it. On by default above the lowest tier.
+- `goldfish`: boolean switch (default `true`) for a check where a model that sees only the spec and the repo tries to break it. Its model chain is `models.goldfish`. It runs only on tiers above the lowest, and never on the spec's own model.
 - `notify.desktop`: desktop notifications when a job needs the owner.
 
 ## Workflow after a change
 
 1. Edit `.forja/config.json` or an override file in the repo.
-2. Merge the change to main. The engine picks it up from `forja-main`.
+2. Commit the change and merge it to main yourself. Claude never commits or pushes for you. The runner reads config only from `forja-main`, so until the change is merged it has no effect.
 3. Run `/forja:doctor`.

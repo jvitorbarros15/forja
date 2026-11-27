@@ -23,7 +23,7 @@ test('every command has frontmatter and references cli.mjs with CLAUDE_PLUGIN_RO
 test('setup runs detect, init and doctor through cli.mjs', () => {
   const text = read('commands/setup.md');
   assert.match(text, /cli\.mjs" detect --project "\$PWD"/);
-  assert.match(text, /cli\.mjs" init --project "\$PWD" --answers '<json>'/);
+  assert.match(text, /cli\.mjs" init --project "\$PWD" --answers-file <path>/);
   assert.match(text, /cli\.mjs" doctor --project "\$PWD"/);
 });
 

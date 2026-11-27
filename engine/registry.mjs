@@ -51,13 +51,15 @@ export function roles(cfg) {
     add(name, def, fs.existsSync(override) ? override : `${plugin}/agents/${name}.md`);
   }
   for (const [kind, r] of Object.entries(cfg.reviewers)) {
-    add(`review-${kind}`, { slot: kind, out: reviewOut(kind), start: MARKED }, fwd(path.resolve(main, r.agent)), r.allow ?? []);
+    const name = `review-${kind}`;
+    add(name, { slot: kind, out: reviewOut(kind), start: MARKED }, fwd(path.resolve(main, r.agent)), r.allow ?? []);
+    out[name].skills = [...new Set([...out[name].skills, ...(r.skills ?? [])])];
   }
   return out;
 }
 
 export function renderAgent(cfg, role, homeDir = os.homedir()) {
-  const { head, body: raw } = parse(fs.readFileSync(role.template, 'utf8'));
+  const { body: raw } = parse(fs.readFileSync(role.template, 'utf8'));
   const checks = setChecks(cfg, role.checks);
   const fill = {
     privacyRules: [...cfg.privacy.promptRules.map((r) => `- ${r}`), ...(cfg.privacy.denyRead.length ? [`- Never read files matching: ${cfg.privacy.denyRead.join(', ')}`] : [])].join('\n'),
@@ -69,7 +71,7 @@ export function renderAgent(cfg, role, homeDir = os.homedir()) {
   const body = raw.replace(/\{\{(\w+)\}\}/g, (m, k) => fill[k] ?? m).trim();
   if (!body) throw new Error(`no agent body for ${role.name}`);
   const skillDirs = [];
-  const text = skillsOf(head).map((k) => {
+  const text = role.skills.map((k) => {
     const dir = [`${cfg.paths.plugin}/skills/${k}`, `${fwd(homeDir)}/.claude/skills/${k}`].find((d) => fs.existsSync(`${d}/SKILL.md`));
     if (!dir) throw new Error(`skill ${k} missing for ${role.name}`);
     skillDirs.push(dir);
