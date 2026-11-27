@@ -715,7 +715,7 @@ function evidence(j){
   const bits=[...rv.map(([k,r])=>reviewChip(j,k,r))];
   if(num(j.pr)&&j.ci)bits.push(h('span',{class:'chip '+(j.ci==='pass'?'pass':j.ci==='fail'?'fail':'')},`${t('ui.ci')} ${j.ci==='pass'?'✓':j.ci==='fail'?'✗':'…'}`));
   if(files.length)bits.push(h('span',{class:'mono'},t(files.length===1?'ui.files.one':'ui.files.other',{n:files.length}),` +${add} −${del}`));
-  if(tokTotal(j))bits.push(h('span',{class:'mono'},`${compact(tokTotal(j))} ${t('ui.tok')}`));
+  if(tokTotal(j))bits.push(h('span',{class:'mono'},`${compact(tokTotal(j))} ${t('ui.tokens')}`));
   return bits.length?h('div',{class:'ev'},bits):null;
 }
 // The stopped job's decision box: the reason in plain words, the AI recommendation, the buttons, the evidence one line below.
@@ -744,7 +744,7 @@ function card(j){
     !stopCard&&chips.length?h('div',{class:'chips'},chips):null,
     !stopCard?[openCmds(j.id).map(c=>{const a=ACT[c.action];return a?shim(h('div',{class:'queued','data-tone':a.tone},`${t(a.name)} · ${t(CST[c.status]||'ui.cmd.pending')}`)):null}),
       h('div',{class:'state '+st.kind},h('span',null,st.text,st.since?[' · ',tk(st.since)]:null)),
-      h('div',{class:'foot'},h('span',null,j.branch||''),tokTotal(j)?h('span',null,`${compact(tokTotal(j))} ${t('ui.tok')}`):null)]:null);
+      h('div',{class:'foot'},h('span',null,j.branch||''),tokTotal(j)?h('span',null,`${compact(tokTotal(j))} ${t('ui.tokens')}`):null)]:null);
   return flashOf(h('article',{class:'card'+(stopCard?' stopped':live?' running':'')},body,stopCard?decision(j,false):null),j.id);
 }
 
@@ -785,7 +785,7 @@ function renderDeploy(){
 function section(cls,title,count,...kids){return h('section',{class:'sec '+cls},h('header',null,h('h2',null,title),h('span',{class:'count'+(cls==='need'&&count?' hot':'')},count)),kids)}
 function doneRow(j){
   const waiting=j.stage==='merged';
-  return h('button',{type:'button',class:'drow','data-key':'done:'+j.id,onclick:()=>openDrawer(j.id,true)},h('span',{class:'id'},ref(j)),h('span',{class:'t'},j.title||''),h('span',{class:'s'+(waiting?' wait':'')},waiting?t('ui.state.mergedShort'):t('ui.state.live'),jobSpan(j)?' · '+fmtDone(jobSpan(j)):'',tokTotal(j)?` · ${compact(tokTotal(j))} ${t('ui.tok')}`:''));
+  return h('button',{type:'button',class:'drow','data-key':'done:'+j.id,onclick:()=>openDrawer(j.id,true)},h('span',{class:'id'},ref(j)),h('span',{class:'t'},j.title||''),h('span',{class:'s'+(waiting?' wait':'')},waiting?t('ui.state.mergedShort'):t('ui.state.live'),jobSpan(j)?' · '+fmtDone(jobSpan(j)):'',tokTotal(j)?` · ${compact(tokTotal(j))} ${t('ui.tokens')}`:''));
 }
 function renderBoard(){
   const list=jobs.filter(passes),filtering=!!(q||tierF||stageF);
@@ -835,11 +835,11 @@ function workers(j){
     const isOpen=r===latest||r===99&&list.some(w=>w.status==='running')||openRounds.has(key);
     const title=r===0?t('ui.round.spec'):r===99?t('ui.round.deploys'):t('ui.round',{n:r});
     const d=h('details',{class:'round','data-key':'round:'+key,open:isOpen,ontoggle:e=>{if(e.target.open)openRounds.add(key);else openRounds.delete(key)}},
-      h('summary',null,h('span',null,title),h('span',{class:'sm'},t(list.length===1?'ui.workers.one':'ui.workers.other',{n:list.length}),sum?` · ${compact(sum)} ${t('ui.tok')}`:'')),
-      h('div',{class:'wk'},list.map(w=>h('div',{class:'wrow'},h('span',null,h('b',null,mName(w.model)),h('span',{class:'what'},' · '+roleName(w.role))),h('span',{class:'st '+(WST[w.status]?w.status:'')},WST[w.status]?t(WST[w.status]):w.status||'?'),h('span',{class:'what'},w.status==='running'&&w.startedAt?[t('ui.runningFor'),' ',tk(w.startedAt)]:dur(w)?[t('ui.state.tookIn',{d:dur(w)}),w.endedAt?' · '+hm(w.endedAt):'']:''),h('span',{class:'num'},tok(w.tokens,w.estimated)+' '+t('ui.tok'))))));
+      h('summary',null,h('span',null,title),h('span',{class:'sm'},t(list.length===1?'ui.workers.one':'ui.workers.other',{n:list.length}),sum?` · ${compact(sum)} ${t('ui.tokens')}`:'')),
+      h('div',{class:'wk'},list.map(w=>h('div',{class:'wrow'},h('span',null,h('b',null,mName(w.model)),h('span',{class:'what'},' · '+roleName(w.role))),h('span',{class:'st '+(WST[w.status]?w.status:'')},WST[w.status]?t(WST[w.status]):w.status||'?'),h('span',{class:'what'},w.status==='running'&&w.startedAt?[t('ui.runningFor'),' ',tk(w.startedAt)]:dur(w)?[t('ui.state.tookIn',{d:dur(w)}),w.endedAt?' · '+hm(w.endedAt):'']:''),h('span',{class:'num'},tok(w.tokens,w.estimated)+' '+t('ui.tokens'))))));
     return d;
   };
-  return h('section',null,h('h3',null,t('ui.sec.workers')),h('div',{class:'stack'},rounds.map(block)),tt&&tt.total?h('p',{class:'wtot'},t('ui.workers.total'),' ',h('b',null,tok(tt,tt.estimated)),' ',t('ui.tok'),vs.map(([v,x])=>[' · ',vName(v),' ',h('b',null,tok(x,x.estimated))]),'. ',t('ui.tok.est')):null);
+  return h('section',null,h('h3',null,t('ui.sec.workers')),h('div',{class:'stack'},rounds.map(block)),tt&&tt.total?h('p',{class:'wtot'},t('ui.workers.total'),' ',h('b',null,tok(tt,tt.estimated)),' ',t('ui.tokens'),vs.map(([v,x])=>[' · ',vName(v),' ',h('b',null,tok(x,x.estimated))]),'. ',t('ui.tokens.est')):null);
 }
 function openDrawer(id,focus){
   const j=jobs.find(x=>x.id===id);if(!j)return closeDrawer();
