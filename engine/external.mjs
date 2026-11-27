@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { existsSync, mkdirSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { basename, dirname, isAbsolute, relative, resolve } from 'node:path';
 import { check } from './checks.mjs';
+import { PROTECTED, globMatch } from './config.mjs';
 import { t } from './i18n.mjs';
 import { logCall, parseEntry, quota } from './models.mjs';
 import { field, git, paths, read } from './state.mjs';
@@ -40,9 +41,21 @@ function feedback(cfg, n, round) {
   return parts.length ? `\n\n# Fix these findings\n${parts.join('\n\n')}` : '';
 }
 
+// An Edits path is the spec's text, so it is untrusted: relative, inside the worktree after symlinks, and never a protected
+// path (compared in lower case: Windows and macOS folders are case-insensitive) or a dependency folder.
+function inside(wt, file) {
+  if (isAbsolute(file) || /^([a-z]:|[\\/])/i.test(file)) return false;
+  try {
+    const root = realpathSync(wt), abs = resolve(wt, file), real = existsSync(abs) ? realpathSync(abs) : resolve(realpathSync(dirname(abs)), basename(abs));
+    const rel = relative(root, real).replaceAll('\\', '/'), lex = relative(resolve(wt), abs).replaceAll('\\', '/');
+    if (!rel || rel === '..' || rel.startsWith('../') || isAbsolute(rel)) return false;
+    return ![rel, lex].some(p => globMatch(p.toLowerCase(), [...PROTECTED, 'node_modules/**', '**/node_modules/**']));
+  } catch { return false; }
+}
+
 function exact(cfg, n, wt, spec) {
   const L = (k, v) => t(cfg.language, k, v), list = edits(spec), todo = list.filter(e => !applied(wt, e));
-  if (!list.length || list.some(e => e.file.includes('..'))) return L('err.noExactEdits');
+  if (!list.length || list.some(e => !inside(wt, e.file))) return L('err.noExactEdits');
   const bad = todo.find(e => count(text(wt, e.file), e.before) !== 1);
   if (bad) return L('err.exactAmbiguous', { count: count(text(wt, bad.file), bad.before), file: bad.file });
   for (const e of todo) {

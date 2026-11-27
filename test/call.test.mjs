@@ -1,6 +1,6 @@
 // Worktrees, checks, external calls, shipping and triage. Each env is a temp git repo with a bare "origin"; vendors are the fake CLI and gh is a fake. No network.
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
@@ -574,4 +574,30 @@ test('later rounds reuse the spec subject, so a custom commit pattern keeps pass
   await check(E.cfg, 74, 'claude:sonnet', 2);
   assert.match(rd(`${E.J(74)}/build.md`), /^BUILD: OK\nExecutor: claude:sonnet\nRound: 2\nCommit: [0-9a-f]+ ABC-1 do the thing/);
   assert.equal(g(wt, 'rev-list', '--count', 'origin/main..HEAD').trim(), '2');
+});
+
+test('the exact executor refuses paths outside the worktree, protected paths and dependency folders', async () => {
+  const E = mkEnv(), edit = (file, before, after) => `### ${file}\nBEFORE:\n\`\`\`text\n${before}\n\`\`\`\nAFTER:\n\`\`\`text\n${after}\n\`\`\`\n`;
+  const outside = `${E.root}/outside`, secret = `${outside}/secret.txt`;
+  put(secret, 'a');
+  const wt = job(E, 60);
+  put(`${wt}/.forja/config.json`, 'a');
+  put(`${wt}/.github/workflows/ci.yml`, 'a');
+  put(`${wt}/node_modules/pkg/index.js`, 'a');
+  put(`${wt}/packages/app/node_modules/x.js`, 'a');
+  rmSync(`${wt}/node_modules`, { recursive: true, force: true });
+  put(`${wt}/node_modules/pkg/index.js`, 'a');
+  symlinkSync(outside, `${wt}/link`, 'junction');
+  const targets = ['../outside/secret.txt', secret, '.forja/config.json', '.FORJA/config.json', '.github/workflows/ci.yml', 'node_modules/pkg/index.js', 'packages/app/node_modules/x.js', 'link/secret.txt', '/etc/passwd', '\\windows\\x', 'C:/x'];
+  for (const file of targets) {
+    put(`${E.J(60)}/spec.md`, SPEC(60, edit(file, 'a', 'b')));
+    await build(E.cfg, 60, 'local:exact', 1);
+    assert.match(rd(`${E.J(60)}/build.md`), /^BUILD: FAILED[\s\S]*no usable Edits block/, file);
+  }
+  assert.equal(rd(secret), 'a');
+  assert.equal(rd(`${wt}/.forja/config.json`), 'a');
+  assert.equal(rd(`${wt}/node_modules/pkg/index.js`), 'a');
+  put(`${E.J(60)}/spec.md`, SPEC(60, edit('src/../README.md', 'a', 'b')));
+  assert.equal((await build(E.cfg, 60, 'local:exact', 1)).status, 'ok');
+  assert.equal(rd(`${wt}/README.md`).replaceAll('\r\n', '\n'), 'b\n');
 });
