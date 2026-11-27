@@ -1,0 +1,95 @@
+{
+  "pr": 52,
+  "summary": "",
+  "tier": "A",
+  "round": 1,
+  "branch": "forja/108-checkout-taxes",
+  "reviews": {
+    "code": {
+      "verdict": "PASS"
+    }
+  },
+  "files": [],
+  "events": [
+    {
+      "at": "2026-11-27T15:39:21.747Z",
+      "text": "Issue received"
+    },
+    {
+      "at": "2026-11-27T16:49:21.747Z",
+      "text": "Checks passed; review (code)"
+    },
+    {
+      "at": "2026-11-27T17:33:21.747Z",
+      "text": "PR opened, #52"
+    },
+    {
+      "at": "2026-11-27T17:34:21.747Z",
+      "text": "Merged"
+    }
+  ],
+  "note": "",
+  "need": null,
+  "running": [],
+  "paused": false,
+  "approved": false,
+  "since": "2026-11-27T17:34:21.747Z",
+  "ci": null,
+  "retryAt": null,
+  "workers": [
+    {
+      "id": "spec-0-sonnet",
+      "model": "sonnet",
+      "vendor": "claude",
+      "role": "spec",
+      "round": 0,
+      "status": "ok",
+      "startedAt": "2026-11-27T15:39:21.747Z",
+      "endedAt": "2026-11-27T15:43:21.747Z",
+      "durationMs": 240000,
+      "tokens": {
+        "input": 6900,
+        "output": 1500,
+        "total": 8400
+      },
+      "estimated": false
+    },
+    {
+      "id": "builder-1-haiku",
+      "model": "haiku",
+      "vendor": "claude",
+      "role": "builder",
+      "round": 1,
+      "status": "ok",
+      "startedAt": "2026-11-27T16:09:21.747Z",
+      "endedAt": "2026-11-27T16:16:21.747Z",
+      "durationMs": 420000,
+      "tokens": {
+        "input": 22100,
+        "output": 4800,
+        "total": 26900
+      },
+      "estimated": false
+    }
+  ],
+  "triage": null,
+  "ai": null,
+  "issue": 108,
+  "title": "Show the order total with taxes on the checkout summary",
+  "stage": "merged",
+  "updatedAt": "2026-11-27T17:34:21.747Z",
+  "tokens": {
+    "input": 29000,
+    "output": 6300,
+    "total": 35300,
+    "estimated": false,
+    "byVendor": {
+      "claude": {
+        "input": 29000,
+        "output": 6300,
+        "total": 35300,
+        "estimated": false
+      }
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "repo": "demo/demo",
+  "approvers": ["demo"],
+  "checks": { "deployTest": "npm run deploy:test", "deploy": "npm run deploy" },
+  "vendors": { "codex": { "enabled": true } },
+  "models": { "build": { "exact": ["local:exact"], "small": ["claude:haiku"], "medium": ["codex:gpt-5.1-codex", "claude:sonnet"], "hard": ["claude:opus"] } }
+}

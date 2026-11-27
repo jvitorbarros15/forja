@@ -1,0 +1,70 @@
+{
+  "pr": null,
+  "summary": "",
+  "tier": "A",
+  "round": 1,
+  "branch": "forja/110-dark-banner",
+  "reviews": {},
+  "files": [],
+  "events": [
+    {
+      "at": "2026-11-27T17:49:21.747Z",
+      "text": "Issue received"
+    },
+    {
+      "at": "2026-11-27T18:09:21.747Z",
+      "text": "Building (exact)"
+    },
+    {
+      "at": "2026-11-27T18:21:21.747Z",
+      "text": "Pause requested by you"
+    }
+  ],
+  "note": "",
+  "need": null,
+  "running": [],
+  "paused": true,
+  "approved": false,
+  "since": "2026-11-27T18:09:21.747Z",
+  "ci": null,
+  "retryAt": null,
+  "workers": [
+    {
+      "id": "spec-0-sonnet",
+      "model": "sonnet",
+      "vendor": "claude",
+      "role": "spec",
+      "round": 0,
+      "status": "ok",
+      "startedAt": "2026-11-27T17:49:21.747Z",
+      "endedAt": "2026-11-27T17:52:21.747Z",
+      "durationMs": 180000,
+      "tokens": {
+        "input": 5400,
+        "output": 1300,
+        "total": 6700
+      },
+      "estimated": false
+    }
+  ],
+  "triage": null,
+  "ai": null,
+  "issue": 110,
+  "title": "Add dark mode to the marketing banner",
+  "stage": "build",
+  "updatedAt": "2026-11-27T18:21:21.747Z",
+  "tokens": {
+    "input": 5400,
+    "output": 1300,
+    "total": 6700,
+    "estimated": false,
+    "byVendor": {
+      "claude": {
+        "input": 5400,
+        "output": 1300,
+        "total": 6700,
+        "estimated": false
+      }
+    }
+  }
+}

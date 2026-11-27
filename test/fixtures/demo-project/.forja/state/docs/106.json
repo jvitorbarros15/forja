@@ -1,0 +1,310 @@
+{
+  "pr": 61,
+  "summary": "Re-deliver failed webhooks with exponential backoff and a dead-letter list.",
+  "tier": "C",
+  "round": 3,
+  "branch": "forja/106-webhook-backoff",
+  "reviews": {
+    "code": {
+      "verdict": "PASS",
+      "note": "Backoff math is correct and tested."
+    },
+    "ponytail": {
+      "verdict": "PASS",
+      "note": "Small and direct."
+    },
+    "security": {
+      "verdict": "CHANGES",
+      "note": "No per-endpoint concurrency cap; one slow receiver starves the rest."
+    }
+  },
+  "files": [
+    {
+      "path": "src/webhooks/retry.ts",
+      "add": 96,
+      "del": 11
+    },
+    {
+      "path": "src/webhooks/deadletter.ts",
+      "add": 38,
+      "del": 0
+    },
+    {
+      "path": "test/retry.test.ts",
+      "add": 112,
+      "del": 6
+    }
+  ],
+  "events": [
+    {
+      "at": "2026-11-27T15:59:21.747Z",
+      "text": "Issue received"
+    },
+    {
+      "at": "2026-11-27T16:17:21.747Z",
+      "text": "Tier C: the strong model reviews the spec"
+    },
+    {
+      "at": "2026-11-27T16:39:21.747Z",
+      "text": "Spec ready: tier C, executor hard."
+    },
+    {
+      "at": "2026-11-27T17:33:21.747Z",
+      "text": "Review asked for changes (security); round 2"
+    },
+    {
+      "at": "2026-11-27T18:29:21.747Z",
+      "text": "Review asked for changes (security); round 3"
+    },
+    {
+      "at": "2026-11-27T18:55:21.747Z",
+      "text": "The reviews still ask for changes after 3 rounds (security)."
+    }
+  ],
+  "note": "The reviews still ask for changes after 3 rounds (security).",
+  "need": {
+    "why": "The reviews still ask for changes after 3 rounds (security). Reviewer note: the retry job runs without a per-endpoint concurrency cap, so one slow receiver can starve the rest.",
+    "action": "Forja stops after 3 rounds so it does not spend without end; only you decide whether the reviewer request holds. Read the reviews below: if it does not hold, approve; otherwise redo with a note.",
+    "buttons": [
+      "approve",
+      "redo"
+    ]
+  },
+  "running": [],
+  "paused": false,
+  "approved": false,
+  "since": "2026-11-27T18:55:21.747Z",
+  "ci": "pass",
+  "retryAt": null,
+  "workers": [
+    {
+      "id": "spec-0-opus",
+      "model": "opus",
+      "vendor": "claude",
+      "role": "spec",
+      "round": 0,
+      "status": "ok",
+      "startedAt": "2026-11-27T15:59:21.747Z",
+      "endedAt": "2026-11-27T16:17:21.747Z",
+      "durationMs": 1080000,
+      "tokens": {
+        "input": 15100,
+        "output": 4600,
+        "total": 19700
+      },
+      "estimated": false
+    },
+    {
+      "id": "builder-1-opus",
+      "model": "opus",
+      "vendor": "claude",
+      "role": "builder",
+      "round": 1,
+      "status": "ok",
+      "startedAt": "2026-11-27T16:39:21.747Z",
+      "endedAt": "2026-11-27T17:05:21.747Z",
+      "durationMs": 1560000,
+      "tokens": {
+        "input": 91200,
+        "output": 23800,
+        "total": 115000
+      },
+      "estimated": false
+    },
+    {
+      "id": "review-code-1",
+      "model": "sonnet",
+      "vendor": "claude",
+      "role": "review-code",
+      "round": 1,
+      "status": "ok",
+      "startedAt": "2026-11-27T17:11:21.747Z",
+      "endedAt": "2026-11-27T17:15:21.747Z",
+      "durationMs": 240000,
+      "tokens": {
+        "input": 25100,
+        "output": 2200,
+        "total": 27300
+      },
+      "estimated": false
+    },
+    {
+      "id": "review-ponytail-1",
+      "model": "sonnet",
+      "vendor": "claude",
+      "role": "review-ponytail",
+      "round": 1,
+      "status": "ok",
+      "startedAt": "2026-11-27T17:11:21.747Z",
+      "endedAt": "2026-11-27T17:14:21.747Z",
+      "durationMs": 180000,
+      "tokens": {
+        "input": 20300,
+        "output": 1500,
+        "total": 21800
+      },
+      "estimated": false
+    },
+    {
+      "id": "review-security-1",
+      "model": "opus",
+      "vendor": "claude",
+      "role": "review-security",
+      "round": 1,
+      "status": "ok",
+      "startedAt": "2026-11-27T17:11:21.747Z",
+      "endedAt": "2026-11-27T17:18:21.747Z",
+      "durationMs": 420000,
+      "tokens": {
+        "input": 32200,
+        "output": 4100,
+        "total": 36300
+      },
+      "estimated": false
+    },
+    {
+      "id": "builder-2-opus",
+      "model": "opus",
+      "vendor": "claude",
+      "role": "builder",
+      "round": 2,
+      "status": "ok",
+      "startedAt": "2026-11-27T17:35:21.747Z",
+      "endedAt": "2026-11-27T17:56:21.747Z",
+      "durationMs": 1260000,
+      "tokens": {
+        "input": 77100,
+        "output": 18200,
+        "total": 95300
+      },
+      "estimated": false
+    },
+    {
+      "id": "review-security-2",
+      "model": "opus",
+      "vendor": "claude",
+      "role": "review-security",
+      "round": 2,
+      "status": "ok",
+      "startedAt": "2026-11-27T18:03:21.747Z",
+      "endedAt": "2026-11-27T18:09:21.747Z",
+      "durationMs": 360000,
+      "tokens": {
+        "input": 33800,
+        "output": 3700,
+        "total": 37500
+      },
+      "estimated": false
+    },
+    {
+      "id": "builder-3-opus",
+      "model": "opus",
+      "vendor": "claude",
+      "role": "builder",
+      "round": 3,
+      "status": "ok",
+      "startedAt": "2026-11-27T18:30:21.747Z",
+      "endedAt": "2026-11-27T18:49:21.747Z",
+      "durationMs": 1140000,
+      "tokens": {
+        "input": 70400,
+        "output": 16900,
+        "total": 87300
+      },
+      "estimated": false
+    },
+    {
+      "id": "review-code-3",
+      "model": "sonnet",
+      "vendor": "claude",
+      "role": "review-code",
+      "round": 3,
+      "status": "ok",
+      "startedAt": "2026-11-27T18:51:21.747Z",
+      "endedAt": "2026-11-27T18:54:21.747Z",
+      "durationMs": 180000,
+      "tokens": {
+        "input": 26200,
+        "output": 2000,
+        "total": 28200
+      },
+      "estimated": false
+    },
+    {
+      "id": "review-ponytail-3",
+      "model": "sonnet",
+      "vendor": "claude",
+      "role": "review-ponytail",
+      "round": 3,
+      "status": "ok",
+      "startedAt": "2026-11-27T18:51:21.747Z",
+      "endedAt": "2026-11-27T18:53:21.747Z",
+      "durationMs": 120000,
+      "tokens": {
+        "input": 20800,
+        "output": 1300,
+        "total": 22100
+      },
+      "estimated": false
+    },
+    {
+      "id": "review-security-3",
+      "model": "opus",
+      "vendor": "claude",
+      "role": "review-security",
+      "round": 3,
+      "status": "ok",
+      "startedAt": "2026-11-27T18:51:21.747Z",
+      "endedAt": "2026-11-27T18:57:21.747Z",
+      "durationMs": 360000,
+      "tokens": {
+        "input": 34400,
+        "output": 3600,
+        "total": 38000
+      },
+      "estimated": false
+    },
+    {
+      "id": "advisor-3",
+      "model": "sonnet",
+      "vendor": "claude",
+      "role": "advisor",
+      "round": 3,
+      "status": "ok",
+      "startedAt": "2026-11-27T18:56:21.747Z",
+      "endedAt": "2026-11-27T18:57:21.747Z",
+      "durationMs": 60000,
+      "tokens": {
+        "input": 12100,
+        "output": 700,
+        "total": 12800
+      },
+      "estimated": false
+    }
+  ],
+  "triage": null,
+  "ai": {
+    "rec": "redo",
+    "why": "The concurrency gap is real: a stuck endpoint blocks the shared worker pool.",
+    "done": "Read the diff and the security note; confirmed there is no cap in retry.ts.",
+    "note": "Cap concurrent retries per endpoint at 2 and add a test with one slow receiver."
+  },
+  "issue": 106,
+  "title": "Retry failed webhook deliveries with backoff",
+  "stage": "needs-you",
+  "updatedAt": "2026-11-27T18:55:21.747Z",
+  "tokens": {
+    "input": 458700,
+    "output": 82600,
+    "total": 541300,
+    "estimated": false,
+    "byVendor": {
+      "claude": {
+        "input": 458700,
+        "output": 82600,
+        "total": 541300,
+        "estimated": false
+      }
+    }
+  }
+}

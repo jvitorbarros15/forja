@@ -1,0 +1,107 @@
+{
+  "pr": 58,
+  "summary": "The last page showed one result too many.",
+  "tier": "A",
+  "round": 1,
+  "branch": "forja/105-pagination-footer",
+  "reviews": {
+    "code": {
+      "verdict": "PASS",
+      "note": "Boundary fixed and covered by a test."
+    }
+  },
+  "files": [
+    {
+      "path": "src/ui/Pagination.tsx",
+      "add": 2,
+      "del": 2
+    },
+    {
+      "path": "test/pagination.test.ts",
+      "add": 14,
+      "del": 0
+    }
+  ],
+  "events": [
+    {
+      "at": "2026-11-27T18:41:21.747Z",
+      "text": "Issue received"
+    },
+    {
+      "at": "2026-11-27T18:48:21.747Z",
+      "text": "Spec ready: tier A, executor exact."
+    },
+    {
+      "at": "2026-11-27T18:55:21.747Z",
+      "text": "Checks passed; review (code)"
+    },
+    {
+      "at": "2026-11-27T19:03:21.747Z",
+      "text": "PR opened, #58"
+    }
+  ],
+  "note": "",
+  "need": null,
+  "running": [],
+  "paused": false,
+  "approved": false,
+  "since": "2026-11-27T19:03:21.747Z",
+  "ci": "pending",
+  "retryAt": null,
+  "workers": [
+    {
+      "id": "spec-0-sonnet",
+      "model": "sonnet",
+      "vendor": "claude",
+      "role": "spec",
+      "round": 0,
+      "status": "ok",
+      "startedAt": "2026-11-27T18:41:21.747Z",
+      "endedAt": "2026-11-27T18:45:21.747Z",
+      "durationMs": 240000,
+      "tokens": {
+        "input": 7600,
+        "output": 1800,
+        "total": 9400
+      },
+      "estimated": false
+    },
+    {
+      "id": "review-code-1",
+      "model": "sonnet",
+      "vendor": "claude",
+      "role": "review-code",
+      "round": 1,
+      "status": "ok",
+      "startedAt": "2026-11-27T18:55:21.747Z",
+      "endedAt": "2026-11-27T18:57:21.747Z",
+      "durationMs": 120000,
+      "tokens": {
+        "input": 9300,
+        "output": 800,
+        "total": 10100
+      },
+      "estimated": false
+    }
+  ],
+  "triage": null,
+  "ai": null,
+  "issue": 105,
+  "title": "Fix off-by-one in the pagination footer",
+  "stage": "pr",
+  "updatedAt": "2026-11-27T19:03:21.747Z",
+  "tokens": {
+    "input": 16900,
+    "output": 2600,
+    "total": 19500,
+    "estimated": false,
+    "byVendor": {
+      "claude": {
+        "input": 16900,
+        "output": 2600,
+        "total": 19500,
+        "estimated": false
+      }
+    }
+  }
+}

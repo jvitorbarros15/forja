@@ -1,0 +1,204 @@
+{
+  "pr": null,
+  "summary": "List each failed attempt with its reason so support can answer without opening the logs.",
+  "tier": "B",
+  "round": 2,
+  "branch": "forja/103-payment-retries",
+  "reviews": {
+    "code": {
+      "verdict": "PASS",
+      "note": "Retry list is derived from existing state; no duplicated fetch."
+    },
+    "ui": {
+      "verdict": "pending"
+    },
+    "ponytail": {
+      "verdict": "pending",
+      "note": "Held until the first reviews pass."
+    }
+  },
+  "files": [
+    {
+      "path": "src/invoices/Retries.tsx",
+      "add": 64,
+      "del": 3
+    },
+    {
+      "path": "src/invoices/InvoiceScreen.tsx",
+      "add": 9,
+      "del": 1
+    },
+    {
+      "path": "test/retries.test.ts",
+      "add": 41,
+      "del": 0
+    }
+  ],
+  "events": [
+    {
+      "at": "2026-11-27T18:25:21.747Z",
+      "text": "Issue received"
+    },
+    {
+      "at": "2026-11-27T18:39:21.747Z",
+      "text": "Spec ready: tier B, executor medium."
+    },
+    {
+      "at": "2026-11-27T18:47:21.747Z",
+      "text": "Review asked for changes (ui); round 2"
+    },
+    {
+      "at": "2026-11-27T19:00:21.747Z",
+      "text": "Checks passed; review (code, ui)"
+    },
+    {
+      "at": "2026-11-27T19:05:21.747Z",
+      "text": "Checks passed; review (code, ui)"
+    }
+  ],
+  "note": "",
+  "need": null,
+  "running": [],
+  "paused": false,
+  "approved": false,
+  "since": "2026-11-27T19:05:21.747Z",
+  "ci": null,
+  "retryAt": null,
+  "workers": [
+    {
+      "id": "spec-0-sonnet",
+      "model": "sonnet",
+      "vendor": "claude",
+      "role": "spec",
+      "round": 0,
+      "status": "ok",
+      "startedAt": "2026-11-27T18:25:21.747Z",
+      "endedAt": "2026-11-27T18:31:21.747Z",
+      "durationMs": 360000,
+      "tokens": {
+        "input": 8800,
+        "output": 2100,
+        "total": 10900
+      },
+      "estimated": false
+    },
+    {
+      "id": "builder-1-sonnet",
+      "model": "sonnet",
+      "vendor": "claude",
+      "role": "builder",
+      "round": 1,
+      "status": "ok",
+      "startedAt": "2026-11-27T18:40:21.747Z",
+      "endedAt": "2026-11-27T18:47:21.747Z",
+      "durationMs": 420000,
+      "tokens": {
+        "input": 38800,
+        "output": 8200,
+        "total": 47000
+      },
+      "estimated": false
+    },
+    {
+      "id": "review-code-1",
+      "model": "sonnet",
+      "vendor": "claude",
+      "role": "review-code",
+      "round": 1,
+      "status": "ok",
+      "startedAt": "2026-11-27T18:47:21.747Z",
+      "endedAt": "2026-11-27T18:50:21.747Z",
+      "durationMs": 180000,
+      "tokens": {
+        "input": 17100,
+        "output": 1500,
+        "total": 18600
+      },
+      "estimated": false
+    },
+    {
+      "id": "review-ui-1",
+      "model": "sonnet",
+      "vendor": "claude",
+      "role": "review-ui",
+      "round": 1,
+      "status": "ok",
+      "startedAt": "2026-11-27T18:47:21.747Z",
+      "endedAt": "2026-11-27T18:51:21.747Z",
+      "durationMs": 240000,
+      "tokens": {
+        "input": 21900,
+        "output": 1800,
+        "total": 23700
+      },
+      "estimated": false
+    },
+    {
+      "id": "builder-2-sonnet",
+      "model": "sonnet",
+      "vendor": "claude",
+      "role": "builder",
+      "round": 2,
+      "status": "ok",
+      "startedAt": "2026-11-27T18:54:21.747Z",
+      "endedAt": "2026-11-27T18:59:21.747Z",
+      "durationMs": 300000,
+      "tokens": {
+        "input": 30100,
+        "output": 6200,
+        "total": 36300
+      },
+      "estimated": false
+    },
+    {
+      "id": "review-code-2",
+      "model": "sonnet",
+      "vendor": "claude",
+      "role": "review-code",
+      "round": 2,
+      "status": "ok",
+      "startedAt": "2026-11-27T19:05:21.747Z",
+      "endedAt": "2026-11-27T19:07:21.747Z",
+      "durationMs": 120000,
+      "tokens": {
+        "input": 17600,
+        "output": 1300,
+        "total": 18900
+      },
+      "estimated": false
+    },
+    {
+      "id": "review-ui-2",
+      "model": "sonnet",
+      "vendor": "claude",
+      "role": "review-ui",
+      "round": 2,
+      "status": "running",
+      "startedAt": "2026-11-27T19:05:21.747Z",
+      "endedAt": null,
+      "durationMs": null,
+      "tokens": null,
+      "estimated": false
+    }
+  ],
+  "triage": null,
+  "ai": null,
+  "issue": 103,
+  "title": "Show payment retries on the invoice screen",
+  "stage": "review",
+  "updatedAt": "2026-11-27T19:07:21.747Z",
+  "tokens": {
+    "input": 134300,
+    "output": 21100,
+    "total": 155400,
+    "estimated": false,
+    "byVendor": {
+      "claude": {
+        "input": 134300,
+        "output": 21100,
+        "total": 155400,
+        "estimated": false
+      }
+    }
+  }
+}

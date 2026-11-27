@@ -1,0 +1,54 @@
+{
+  "jobs": [
+    {
+      "issue": 101,
+      "stage": "spec",
+      "title": "Add CSV export to the reports page"
+    },
+    {
+      "issue": 102,
+      "stage": "build",
+      "title": "Cache exchange rates for ten minutes"
+    },
+    {
+      "issue": 103,
+      "stage": "review",
+      "title": "Show payment retries on the invoice screen"
+    },
+    {
+      "issue": 104,
+      "stage": "approve",
+      "title": "Rotate the signing key for webhook payloads"
+    },
+    {
+      "issue": 105,
+      "stage": "pr",
+      "title": "Fix off-by-one in the pagination footer"
+    },
+    {
+      "issue": 106,
+      "stage": "needs-you",
+      "title": "Retry failed webhook deliveries with backoff"
+    },
+    {
+      "issue": 107,
+      "stage": "failed",
+      "title": "Migrate the settings page to the new form components"
+    },
+    {
+      "issue": 108,
+      "stage": "merged",
+      "title": "Show the order total with taxes on the checkout summary"
+    },
+    {
+      "issue": 109,
+      "stage": "deployed",
+      "title": "Document the environment variables"
+    },
+    {
+      "issue": 110,
+      "stage": "build",
+      "title": "Add dark mode to the marketing banner"
+    }
+  ]
+}

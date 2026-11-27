@@ -1,0 +1,28 @@
+[
+  {
+    "id": "local-1",
+    "jobId": "106",
+    "action": "redo",
+    "note": "Cap retries per endpoint",
+    "status": "done",
+    "at": "2026-11-27T16:39:21.747Z",
+    "doneAt": "2026-11-27T16:40:21.747Z"
+  },
+  {
+    "id": "local-2",
+    "jobId": "108",
+    "action": "deploy-test",
+    "note": "",
+    "status": "done",
+    "at": "2026-11-27T17:39:21.747Z",
+    "doneAt": "2026-11-27T17:41:21.747Z"
+  },
+  {
+    "id": "local-3",
+    "jobId": "103",
+    "action": "pause",
+    "note": "",
+    "status": "pending",
+    "at": "2026-11-27T19:09:09.747Z"
+  }
+]

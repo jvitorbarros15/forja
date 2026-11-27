@@ -1,0 +1,63 @@
+{
+  "pr": null,
+  "summary": "Let people download any report as CSV from the toolbar.",
+  "tier": null,
+  "round": 0,
+  "branch": null,
+  "reviews": {},
+  "files": [],
+  "events": [
+    {
+      "at": "2026-11-27T19:06:21.747Z",
+      "text": "Issue received"
+    },
+    {
+      "at": "2026-11-27T19:06:21.747Z",
+      "text": "Writing the spec"
+    }
+  ],
+  "note": "",
+  "need": null,
+  "running": [
+    "spec"
+  ],
+  "paused": false,
+  "approved": false,
+  "since": "2026-11-27T19:06:21.747Z",
+  "ci": null,
+  "retryAt": null,
+  "workers": [
+    {
+      "id": "spec-0-sonnet",
+      "model": "sonnet",
+      "vendor": "claude",
+      "role": "spec",
+      "round": 0,
+      "status": "running",
+      "startedAt": "2026-11-27T19:06:21.747Z",
+      "endedAt": null,
+      "durationMs": null,
+      "tokens": null,
+      "estimated": false
+    }
+  ],
+  "triage": {
+    "tier": "A",
+    "bucket": "factory",
+    "reason": "Only touches a new export button and a pure formatting helper.",
+    "model": "qwen3",
+    "ms": 910
+  },
+  "ai": null,
+  "issue": 101,
+  "title": "Add CSV export to the reports page",
+  "stage": "spec",
+  "updatedAt": "2026-11-27T19:08:21.747Z",
+  "tokens": {
+    "input": 0,
+    "output": 0,
+    "total": 0,
+    "estimated": false,
+    "byVendor": {}
+  }
+}

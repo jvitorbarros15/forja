@@ -1,0 +1,190 @@
+{
+  "pr": null,
+  "summary": "Support two active keys during rotation so receivers can switch without downtime.",
+  "tier": "C",
+  "round": 1,
+  "branch": "forja/104-rotate-signing-key",
+  "reviews": {
+    "code": {
+      "verdict": "PASS",
+      "note": "Both keys verified in order; old key expires on schedule."
+    },
+    "ponytail": {
+      "verdict": "PASS",
+      "note": "No new abstractions."
+    },
+    "security": {
+      "verdict": "PASS",
+      "note": "Key material never logged; constant-time comparison kept."
+    }
+  },
+  "files": [
+    {
+      "path": "src/webhooks/sign.ts",
+      "add": 48,
+      "del": 12
+    },
+    {
+      "path": "src/webhooks/keys.ts",
+      "add": 33,
+      "del": 0
+    },
+    {
+      "path": "test/sign.test.ts",
+      "add": 70,
+      "del": 4
+    }
+  ],
+  "events": [
+    {
+      "at": "2026-11-27T17:58:21.747Z",
+      "text": "Issue received"
+    },
+    {
+      "at": "2026-11-27T18:09:21.747Z",
+      "text": "Tier C: the strong model reviews the spec"
+    },
+    {
+      "at": "2026-11-27T18:31:21.747Z",
+      "text": "Spec ready: tier C, executor hard."
+    },
+    {
+      "at": "2026-11-27T18:58:21.747Z",
+      "text": "Checks passed; review (code, ponytail, security)"
+    },
+    {
+      "at": "2026-11-27T19:07:21.747Z",
+      "text": "Reviews passed; final approval"
+    }
+  ],
+  "note": "",
+  "need": null,
+  "running": [
+    "approver"
+  ],
+  "paused": false,
+  "approved": false,
+  "since": "2026-11-27T19:07:21.747Z",
+  "ci": null,
+  "retryAt": null,
+  "workers": [
+    {
+      "id": "spec-0-opus",
+      "model": "opus",
+      "vendor": "claude",
+      "role": "spec",
+      "round": 0,
+      "status": "ok",
+      "startedAt": "2026-11-27T17:58:21.747Z",
+      "endedAt": "2026-11-27T18:10:21.747Z",
+      "durationMs": 720000,
+      "tokens": {
+        "input": 14200,
+        "output": 4100,
+        "total": 18300
+      },
+      "estimated": false
+    },
+    {
+      "id": "builder-1-opus",
+      "model": "opus",
+      "vendor": "claude",
+      "role": "builder",
+      "round": 1,
+      "status": "ok",
+      "startedAt": "2026-11-27T18:33:21.747Z",
+      "endedAt": "2026-11-27T18:57:21.747Z",
+      "durationMs": 1440000,
+      "tokens": {
+        "input": 88100,
+        "output": 21400,
+        "total": 109500
+      },
+      "estimated": false
+    },
+    {
+      "id": "review-code-1",
+      "model": "sonnet",
+      "vendor": "claude",
+      "role": "review-code",
+      "round": 1,
+      "status": "ok",
+      "startedAt": "2026-11-27T18:59:21.747Z",
+      "endedAt": "2026-11-27T19:03:21.747Z",
+      "durationMs": 240000,
+      "tokens": {
+        "input": 24400,
+        "output": 2100,
+        "total": 26500
+      },
+      "estimated": false
+    },
+    {
+      "id": "review-ponytail-1",
+      "model": "sonnet",
+      "vendor": "claude",
+      "role": "review-ponytail",
+      "round": 1,
+      "status": "ok",
+      "startedAt": "2026-11-27T18:59:21.747Z",
+      "endedAt": "2026-11-27T19:02:21.747Z",
+      "durationMs": 180000,
+      "tokens": {
+        "input": 20100,
+        "output": 1400,
+        "total": 21500
+      },
+      "estimated": false
+    },
+    {
+      "id": "review-security-1",
+      "model": "opus",
+      "vendor": "claude",
+      "role": "review-security",
+      "round": 1,
+      "status": "ok",
+      "startedAt": "2026-11-27T18:59:21.747Z",
+      "endedAt": "2026-11-27T19:05:21.747Z",
+      "durationMs": 360000,
+      "tokens": {
+        "input": 31800,
+        "output": 3900,
+        "total": 35700
+      },
+      "estimated": false
+    },
+    {
+      "id": "approver-1",
+      "model": "opus",
+      "vendor": "claude",
+      "role": "approver",
+      "round": 1,
+      "status": "running",
+      "startedAt": "2026-11-27T19:07:21.747Z",
+      "endedAt": null,
+      "durationMs": null,
+      "tokens": null,
+      "estimated": false
+    }
+  ],
+  "triage": null,
+  "ai": null,
+  "issue": 104,
+  "title": "Rotate the signing key for webhook payloads",
+  "stage": "approve",
+  "updatedAt": "2026-11-27T19:08:21.747Z",
+  "tokens": {
+    "input": 178600,
+    "output": 32900,
+    "total": 211500,
+    "estimated": false,
+    "byVendor": {
+      "claude": {
+        "input": 178600,
+        "output": 32900,
+        "total": 211500,
+        "estimated": false
+      }
+    }
+  }
+}

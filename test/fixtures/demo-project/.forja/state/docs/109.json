@@ -1,0 +1,78 @@
+{
+  "pr": 49,
+  "summary": "",
+  "tier": "A",
+  "round": 1,
+  "branch": "forja/109-env-docs",
+  "reviews": {
+    "code": {
+      "verdict": "PASS"
+    }
+  },
+  "files": [],
+  "events": [
+    {
+      "at": "2026-11-27T12:09:21.747Z",
+      "text": "Issue received"
+    },
+    {
+      "at": "2026-11-27T14:09:21.747Z",
+      "text": "PR opened, #49"
+    },
+    {
+      "at": "2026-11-27T14:47:21.747Z",
+      "text": "Merged"
+    },
+    {
+      "at": "2026-11-27T14:49:21.747Z",
+      "text": "Deployed"
+    }
+  ],
+  "note": "",
+  "need": null,
+  "running": [],
+  "paused": false,
+  "approved": false,
+  "since": "2026-11-27T14:49:21.747Z",
+  "ci": null,
+  "retryAt": null,
+  "workers": [
+    {
+      "id": "spec-0-sonnet",
+      "model": "sonnet",
+      "vendor": "claude",
+      "role": "spec",
+      "round": 0,
+      "status": "ok",
+      "startedAt": "2026-11-27T12:09:21.747Z",
+      "endedAt": "2026-11-27T12:12:21.747Z",
+      "durationMs": 180000,
+      "tokens": {
+        "input": 5100,
+        "output": 1200,
+        "total": 6300
+      },
+      "estimated": false
+    }
+  ],
+  "triage": null,
+  "ai": null,
+  "issue": 109,
+  "title": "Document the environment variables",
+  "stage": "deployed",
+  "updatedAt": "2026-11-27T14:49:21.747Z",
+  "tokens": {
+    "input": 5100,
+    "output": 1200,
+    "total": 6300,
+    "estimated": false,
+    "byVendor": {
+      "claude": {
+        "input": 5100,
+        "output": 1200,
+        "total": 6300,
+        "estimated": false
+      }
+    }
+  }
+}

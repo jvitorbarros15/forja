@@ -1,0 +1,101 @@
+{
+  "pr": 63,
+  "summary": "",
+  "tier": "B",
+  "round": 3,
+  "branch": "forja/107-settings-forms",
+  "reviews": {
+    "code": {
+      "verdict": "PASS"
+    },
+    "ui": {
+      "verdict": "PASS"
+    },
+    "ponytail": {
+      "verdict": "PASS"
+    }
+  },
+  "files": [
+    {
+      "path": "src/settings/SettingsForm.tsx",
+      "add": 120,
+      "del": 98
+    }
+  ],
+  "events": [
+    {
+      "at": "2026-11-27T16:49:21.747Z",
+      "text": "Issue received"
+    },
+    {
+      "at": "2026-11-27T17:29:21.747Z",
+      "text": "Spec ready: tier B, executor medium."
+    },
+    {
+      "at": "2026-11-27T17:59:21.747Z",
+      "text": "CI on PR #63 failed; round 2"
+    },
+    {
+      "at": "2026-11-27T18:19:21.747Z",
+      "text": "CI on PR #63 failed; round 3"
+    },
+    {
+      "at": "2026-11-27T18:36:21.747Z",
+      "text": "CI on PR #63 failed after 3 rounds."
+    }
+  ],
+  "note": "CI on PR #63 failed after 3 rounds.",
+  "need": {
+    "why": "CI on PR #63 failed after 3 rounds.",
+    "action": "Forja already tried to fix it on its own and stops after 3 rounds. See the CI on the PR; Redo with a note asks for the fix.",
+    "buttons": [
+      "redo"
+    ],
+    "blocked": "CI is red, so there is nothing reviewed to merge."
+  },
+  "running": [],
+  "paused": false,
+  "approved": false,
+  "since": "2026-11-27T18:36:21.747Z",
+  "ci": "fail",
+  "retryAt": null,
+  "workers": [
+    {
+      "id": "builder-3-sonnet",
+      "model": "sonnet",
+      "vendor": "claude",
+      "role": "builder",
+      "round": 3,
+      "status": "ok",
+      "startedAt": "2026-11-27T18:19:21.747Z",
+      "endedAt": "2026-11-27T18:31:21.747Z",
+      "durationMs": 720000,
+      "tokens": {
+        "input": 44100,
+        "output": 9100,
+        "total": 53200
+      },
+      "estimated": false
+    }
+  ],
+  "triage": null,
+  "ai": null,
+  "issue": 107,
+  "title": "Migrate the settings page to the new form components",
+  "stage": "failed",
+  "updatedAt": "2026-11-27T18:36:21.747Z",
+  "tokens": {
+    "input": 44100,
+    "output": 9100,
+    "total": 53200,
+    "estimated": false,
+    "byVendor": {
+      "claude": {
+        "input": 44100,
+        "output": 9100,
+        "total": 53200,
+        "estimated": false
+      }
+    }
+  }
+}

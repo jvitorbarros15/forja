@@ -1,0 +1,146 @@
+{
+  "pr": null,
+  "summary": "Stop calling the rates API on every price render.",
+  "tier": "B",
+  "round": 2,
+  "branch": "forja/102-cache-rates",
+  "reviews": {},
+  "files": [],
+  "events": [
+    {
+      "at": "2026-11-27T18:11:21.747Z",
+      "text": "Issue received"
+    },
+    {
+      "at": "2026-11-27T18:17:21.747Z",
+      "text": "Spec ready: tier B, executor medium."
+    },
+    {
+      "at": "2026-11-27T18:28:21.747Z",
+      "text": "Building (medium)"
+    },
+    {
+      "at": "2026-11-27T18:36:21.747Z",
+      "text": "Review asked for changes (code); round 2"
+    },
+    {
+      "at": "2026-11-27T18:43:21.747Z",
+      "text": "External executor quota exhausted; the build continues with Sonnet"
+    },
+    {
+      "at": "2026-11-27T19:02:21.747Z",
+      "text": "Building (codex)"
+    }
+  ],
+  "note": "",
+  "need": null,
+  "running": [],
+  "paused": false,
+  "approved": false,
+  "since": "2026-11-27T18:43:21.747Z",
+  "ci": null,
+  "retryAt": null,
+  "workers": [
+    {
+      "id": "spec-0-sonnet",
+      "model": "sonnet",
+      "vendor": "claude",
+      "role": "spec",
+      "round": 0,
+      "status": "ok",
+      "startedAt": "2026-11-27T18:11:21.747Z",
+      "endedAt": "2026-11-27T18:16:21.747Z",
+      "durationMs": 300000,
+      "tokens": {
+        "input": 9100,
+        "output": 2300,
+        "total": 11400
+      },
+      "estimated": false
+    },
+    {
+      "id": "builder-1-sonnet",
+      "model": "sonnet",
+      "vendor": "claude",
+      "role": "builder",
+      "round": 1,
+      "status": "ok",
+      "startedAt": "2026-11-27T18:28:21.747Z",
+      "endedAt": "2026-11-27T18:36:21.747Z",
+      "durationMs": 480000,
+      "tokens": {
+        "input": 41200,
+        "output": 9800,
+        "total": 51000
+      },
+      "estimated": false
+    },
+    {
+      "id": "review-code-1",
+      "model": "sonnet",
+      "vendor": "claude",
+      "role": "review-code",
+      "round": 1,
+      "status": "ok",
+      "startedAt": "2026-11-27T18:37:21.747Z",
+      "endedAt": "2026-11-27T18:40:21.747Z",
+      "durationMs": 180000,
+      "tokens": {
+        "input": 18400,
+        "output": 1600,
+        "total": 20000
+      },
+      "estimated": false
+    },
+    {
+      "id": "review-ponytail-1",
+      "model": "sonnet",
+      "vendor": "claude",
+      "role": "review-ponytail",
+      "round": 1,
+      "status": "ok",
+      "startedAt": "2026-11-27T18:37:21.747Z",
+      "endedAt": "2026-11-27T18:39:21.747Z",
+      "durationMs": 120000,
+      "tokens": {
+        "input": 15900,
+        "output": 1100,
+        "total": 17000
+      },
+      "estimated": false
+    },
+    {
+      "id": "build-2-codex",
+      "model": "codex:gpt-5.1-codex",
+      "vendor": "codex",
+      "role": "build",
+      "round": 2,
+      "status": "failed",
+      "startedAt": "2026-11-27T19:00:21.747Z",
+      "endedAt": "2026-11-27T19:02:21.747Z",
+      "durationMs": 120000,
+      "tokens": null,
+      "estimated": false
+    }
+  ],
+  "triage": null,
+  "ai": null,
+  "issue": 102,
+  "title": "Cache exchange rates for ten minutes",
+  "stage": "build",
+  "updatedAt": "2026-11-27T19:02:21.747Z",
+  "tokens": {
+    "input": 84600,
+    "output": 14800,
+    "total": 99400,
+    "estimated": false,
+    "byVendor": {
+      "claude": {
+        "input": 84600,
+        "output": 14800,
+        "total": 99400,
+        "estimated": false
+      }
+    }
+  }
+}

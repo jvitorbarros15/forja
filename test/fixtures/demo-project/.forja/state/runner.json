@@ -1,0 +1,35 @@
+{
+  "pid": 49264,
+  "at": "2026-11-27T19:09:21.747Z",
+  "every": 15,
+  "error": null,
+  "waiting": [
+    {
+      "issue": 102,
+      "stage": "build",
+      "on": "quota"
+    },
+    {
+      "issue": 105,
+      "stage": "pr",
+      "on": "ci"
+    },
+    {
+      "issue": 108,
+      "stage": "merged",
+      "on": "owner"
+    }
+  ],
+  "quota": {
+    "claude": {
+      "h5": 41,
+      "week": 388,
+      "limitedUntil": null
+    },
+    "codex": {
+      "h5": 12,
+      "week": 97,
+      "limitedUntil": "2026-11-27T19:56:21.747Z"
+    }
+  }
+}
