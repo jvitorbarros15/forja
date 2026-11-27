@@ -56,11 +56,24 @@ test('server serves the dashboard and every ui string for the demo project', asy
       const page = await fetch(`http://127.0.0.1:${s.port}/`);
       assert.equal(page.status, 200);
       assert.match(page.headers.get('content-type'), /text\/html/);
-      assert.match(await page.text(), /<title>Forja<\/title>/);
+      const text = await page.text();
+      assert.match(text, /<title>Forja<\/title>/);
+      assert.equal(text.match(/<meta name="forja-boot-failed" content="([^"]*)">/)?.[1], (language === 'en' ? en : ptBR)['server.bootFailed']);
       const c = await (await fetch(`http://127.0.0.1:${s.port}/api/config`)).json();
       for (const k of used) assert.ok(c.strings[k], `${language}: ${k} not served`);
       const jobs = await (await fetch(`http://127.0.0.1:${s.port}/api/jobs`)).json();
       assert.deepEqual([...new Set(jobs.map(j => j.stage))].sort(), ['approve', 'build', 'deployed', 'failed', 'merged', 'needs-you', 'pr', 'review', 'spec']);
     } finally { await s.close(); }
   }
+});
+
+test('dashboard animates only new cards, guards SSE frames and a failed boot, and says tokens', () => {
+  assert.match(html, /\.grid>\.card\.rise\{animation/);
+  assert.doesNotMatch(html, /\.grid>\.card\{animation/);
+  assert.equal(html.match(/JSON\.parse\(e\.data\)/g).length, 1, 'every SSE payload goes through the guarded parser');
+  assert.match(html, /meta\[name="forja-boot-failed"\]/);
+  assert.equal(en['ui.tokens'], 'tokens');
+  assert.equal(ptBR['ui.tokens'], 'tokens');
+  assert.match(html, /t\('ui\.dur\.ms'/);
+  assert.doesNotMatch(html, /' ms'/);
 });

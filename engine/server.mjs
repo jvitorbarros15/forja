@@ -272,7 +272,8 @@ export async function serve(cfg, o = {}) {
     if (get && (is('/') || is('/index.html'))) {
       if (!existsSync(page)) return json(res, 404, { error: L('server.notFound') });
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-      return res.end(readFileSync(page));
+      return res.end(readFileSync(page, 'utf8').replace('<meta charset="utf-8">', m => `${m}
+<meta name="forja-boot-failed" content="${L('server.bootFailed').replace(/[&"<>]/g, c => `&#${c.charCodeAt(0)};`)}">`));
     }
     if (get && is('/api/config')) return json(res, 200, config());
     if (get && is('/api/jobs')) return json(res, 200, jobs());

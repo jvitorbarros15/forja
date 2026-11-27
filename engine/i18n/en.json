@@ -149,6 +149,7 @@
   "issue.bodyOmitted": "(body omitted: not written by an approver)",
   "server.badOrigin": "origin not allowed",
   "server.badHost": "host not allowed",
+  "server.bootFailed": "The dashboard could not load its configuration. Reload the page; if it keeps failing, run /forja:doctor.",
   "server.token": "token required",
   "server.notFound": "not found",
   "server.needJson": "use application/json",
@@ -564,5 +565,6 @@
   "ui.dur.sec": "{n} s",
   "ui.dur.min": "{n} min",
   "ui.dur.minSec": "{m} min {s} s",
-  "ui.dur.hourMin": "{h} h {m} min"
+  "ui.dur.hourMin": "{h} h {m} min",
+  "ui.dur.ms": "{n} ms"
 }

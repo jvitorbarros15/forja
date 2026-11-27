@@ -179,7 +179,7 @@ kbd{font:500 11px var(--mono);border:1px solid var(--line);border-bottom-width:2
 @keyframes ember{0%,100%{filter:brightness(1)}50%{filter:brightness(1.25)}}
 @keyframes spin{to{transform:rotate(1turn)}}
 @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-.grid>.card{animation:rise .32s ease-out both}
+.grid>.card.rise{animation:rise .32s ease-out both}
 
 /* 7. Decision box: the stopped job's reason, the recommendation, the buttons, the evidence */
 .dbox{border-top:1px solid var(--warn-line);background:var(--warn-soft);border-radius:0 0 11px 11px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
@@ -424,20 +424,22 @@ footer{margin-top:20px;font-size:12px;color:var(--muted)}
   <div class="brand">
     <svg viewBox="0 0 64 64" fill="none" aria-hidden="true">
       <defs>
-        <linearGradient id="bg-mark" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#27272A"/><stop offset="100%" stop-color="#111113"/></linearGradient>
-        <linearGradient id="spark-mark" x1="27.5" y1="4" x2="27.5" y2="27" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#FDE047"/><stop offset="48%" stop-color="#FB923C"/><stop offset="100%" stop-color="#EA580C"/></linearGradient>
-        <linearGradient id="bar-mark" x1="16" y1="26" x2="39" y2="26" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#F97316"/><stop offset="50%" stop-color="#FDE047"/><stop offset="100%" stop-color="#F97316"/></linearGradient>
-        <linearGradient id="anvil-mark" x1="28" y1="29" x2="28" y2="57" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#FAFAFA"/><stop offset="100%" stop-color="#D4D4D8"/></linearGradient>
+        <linearGradient id="forja-steel" x1="5" y1="3" x2="57" y2="64" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#292427"/>
+          <stop offset="1" stop-color="#131216"/>
+        </linearGradient>
+        <linearGradient id="forja-ember" x1="18" y1="51" x2="47" y2="13" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#FF713E"/>
+          <stop offset="1" stop-color="#FFCA76"/>
+        </linearGradient>
       </defs>
-      <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#bg-mark)"/>
-      <rect x="2.5" y="2.5" width="59" height="59" rx="13.5" stroke="#FFFFFF" stroke-opacity="0.14"/>
-      <g transform="translate(3.8, 5.4) scale(0.84)">
-        <path d="M27.5 4.2 C28.4 10.8 30.0 13.0 34.4 14.2 C30.0 15.4 28.4 17.4 27.5 22.6 C26.6 17.4 25.0 15.4 20.6 14.2 C25.0 13.0 26.6 10.8 27.5 4.2 Z" fill="url(#spark-mark)"/>
-        <rect x="13.2" y="10.2" width="3.0" height="7.6" rx="1.5" transform="rotate(-34 14.7 14.0)" fill="#FB923C"/>
-        <rect x="38.8" y="9.2" width="2.8" height="7.0" rx="1.4" transform="rotate(34 40.2 12.7)" fill="#FDE047"/>
-        <rect x="16.0" y="24.2" width="23.0" height="3.2" rx="1.6" fill="url(#bar-mark)"/>
-        <path d="M9.5 29.2 H43.5 C49.5 29.2 55.2 30.1 59.1 31.5 C59.8 31.8 59.8 32.7 59.1 33.0 C53.4 36.1 46.8 38.1 40.8 39.8 C39.7 41.8 39.5 44.0 40.2 46.2 C41.4 49.4 44.0 52.0 47.4 53.8 C48.2 54.2 48.5 55.1 48.2 55.9 C47.9 56.6 47.2 57.0 46.4 57.0 H36.4 C35.5 57.0 34.8 56.5 34.4 55.7 C33.5 53.9 31.2 52.8 28.0 52.8 C24.8 52.8 22.5 53.9 21.6 55.7 C21.2 56.5 20.5 57.0 19.6 57.0 H10.0 C9.2 57.0 8.5 56.6 8.2 55.9 C7.9 55.1 8.2 54.2 9.0 53.8 C12.4 52.0 15.0 49.4 16.2 46.2 C16.9 44.0 16.7 41.8 15.6 39.8 L9.3 36.9 C8.3 36.4 7.7 35.5 7.7 34.4 V31.0 C7.7 30.0 8.5 29.2 9.5 29.2 Z" fill="url(#anvil-mark)"/>
-      </g>
+      <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#forja-steel)"/>
+      <rect x="2.5" y="2.5" width="59" height="59" rx="13.5" stroke="#FFFFFF" stroke-opacity=".18"/>
+      <path d="M19 43V26a7 7 0 0 1 7-7h10 M19 41l5.5-5.5a7 7 0 0 1 5-2H32"
+            stroke="url(#forja-ember)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="19" cy="47" r="4.25" fill="#221B20" stroke="#FF7842" stroke-width="4.5"/>
+      <circle cx="36" cy="33.5" r="3.5" fill="#221B20" stroke="#FFAB61" stroke-width="4"/>
+      <path d="m47 12.5 6.5 6.5-6.5 6.5-6.5-6.5z" fill="#FFD48B"/>
     </svg>
     <div><h1>Forja</h1><a class="repo" id="repo" target="_blank" rel="noopener"></a></div>
   </div>
@@ -733,7 +735,9 @@ function decision(j,inDrawer){
   const queued=openCmds(id).map(c=>{const a=ACT[c.action];return a?shim(h('div',{class:'queued','data-tone':a.tone},`${t(a.name)} · ${t(CST[c.status]||'ui.cmd.pending')}`)):null});
   return h('div',{class:'dbox'},h('p',{class:'why'},need.why),need.action?h('p',{class:'todo'},need.action):null,aiBox,btns,redo,queued,!canApprove&&need.blocked?h('p',{class:'hint'},t('ui.approve.off',{why:need.blocked})):null,!canRedo&&busy?h('p',{class:'hint'},t('ui.redo.busy')):null,evidence(j));
 }
+const seenCards=new Set();
 function card(j){
+  const fresh=!seenCards.has(String(j.id));seenCards.add(String(j.id));
   const st=statusOf(j),need=needFor(j),live=st.kind==='run',stopCard=!!need;
   const chips=Object.entries(j.reviews||{}).map(([k,r])=>reviewChip(j,k,r));
   if(num(j.pr)&&['pr','needs-you','failed'].includes(j.stage)&&j.ci)chips.push(h('span',{class:'chip '+(j.ci==='pass'?'pass':j.ci==='fail'?'fail':'')},`${t('ui.ci')} ${j.ci==='pass'?'✓':j.ci==='fail'?'✗':'…'}`));
@@ -745,7 +749,7 @@ function card(j){
     !stopCard?[openCmds(j.id).map(c=>{const a=ACT[c.action];return a?shim(h('div',{class:'queued','data-tone':a.tone},`${t(a.name)} · ${t(CST[c.status]||'ui.cmd.pending')}`)):null}),
       h('div',{class:'state '+st.kind},h('span',null,st.text,st.since?[' · ',tk(st.since)]:null)),
       h('div',{class:'foot'},h('span',null,j.branch||''),tokTotal(j)?h('span',null,`${compact(tokTotal(j))} ${t('ui.tokens')}`):null)]:null);
-  return flashOf(h('article',{class:'card'+(stopCard?' stopped':live?' running':'')},body,stopCard?decision(j,false):null),j.id);
+  return flashOf(h('article',{class:'card'+(fresh?' rise':'')+(stopCard?' stopped':live?' running':'')},body,stopCard?decision(j,false):null),j.id);
 }
 
 /* ---------- 15. Render: board ---------- */
@@ -995,7 +999,7 @@ async function triAsk(){
     if(ac.signal.aborted||!novaOpen)return;
     if(!r.ok||!(o.tier in RANK)){triLast='';$('tri').hidden=true;return}
     const el=$('tri'),sup=o.bucket==='supervisor';
-    el.replaceChildren(h('b',null,t('ui.triage.guess',{tier:o.tier,who:t(sup?'ui.bucket.supervisor':'ui.bucket.factory')}),h('small',null,' '+fmt(o.ms)+' ms')),o.reason?h('span',null,o.reason):null,CFG.tiers.find(x=>x.id===o.tier)?.approval==='owner'?h('span',{class:'hint'},t('ui.triage.ownerApproves')):null);
+    el.replaceChildren(h('b',null,t('ui.triage.guess',{tier:o.tier,who:t(sup?'ui.bucket.supervisor':'ui.bucket.factory')}),h('small',null,' '+t('ui.dur.ms',{n:fmt(o.ms)}))),o.reason?h('span',null,o.reason):null,CFG.tiers.find(x=>x.id===o.tier)?.approval==='owner'?h('span',{class:'hint'},t('ui.triage.ownerApproves')):null);
     el.classList.remove('busy');el.hidden=false;
   }catch{if(!ac.signal.aborted){triLast='';$('tri').hidden=true}}
 }
@@ -1268,22 +1272,22 @@ async function loadDeploy(){try{const r=await fetch(api('/api/deploy'));if(r.ok)
 async function loadRunner(){try{showRunner(await (await fetch(api('/api/runner'))).json())}catch{$('runner').textContent=t('ui.runner.unknown')}}
 function connect(){
   Promise.all([loadJobs().then(()=>live(true)),loadCmds(),loadDeploy(),loadRunner(),loadQueue()]).then(()=>{booted=true;sigBoard='';render()});
-  const es=new EventSource(api('/api/events'));
+  const es=new EventSource(api('/api/events')),on=fn=>e=>{let d;try{d=JSON.parse(e.data)}catch{return}fn(d)};
   es.onopen=()=>{live(true);loadJobs();loadCmds();loadDeploy();loadRunner();loadQueue()};
   es.addEventListener('queue',()=>loadQueue());
   es.onerror=()=>live(false);
-  es.addEventListener('job',e=>{const d=withId(JSON.parse(e.data));const i=jobs.findIndex(x=>x.id===d.id);if(i<0)jobs.push(d);else jobs[i]=d;watchJobs();watchDeploy();render();live(true)});
+  es.addEventListener('job',on(d0=>{const d=withId(d0);const i=jobs.findIndex(x=>x.id===d.id);if(i<0)jobs.push(d);else jobs[i]=d;watchJobs();watchDeploy();render();live(true)}));
   es.addEventListener('board',()=>loadJobs());
-  es.addEventListener('commands',e=>{cmds=JSON.parse(e.data);watchCmds();render()});
-  es.addEventListener('deploy',e=>{dep=JSON.parse(e.data);watchDeploy();render()});
-  es.addEventListener('runner',e=>showRunner(JSON.parse(e.data)));
+  es.addEventListener('commands',on(d=>{cmds=d;watchCmds();render()}));
+  es.addEventListener('deploy',on(d=>{dep=d;watchDeploy();render()}));
+  es.addEventListener('runner',on(showRunner));
   setInterval(()=>{loadRunner();loadDeploy()},30000);
   setInterval(render,20000);
   setInterval(()=>{if(view==='queue')loadQueue();if(view==='issues')loadIssues()},30000);
   setInterval(paintAll,1000);
 }
 async function boot(){
-  try{CFG=await (await fetch(api('/api/config'))).json()}catch{return}
+  try{const r=await fetch(api('/api/config'));if(!r.ok)throw 0;CFG=await r.json()}catch{$('boardBody').replaceChildren(h('div',{class:'empty'},document.querySelector('meta[name="forja-boot-failed"]')?.content||'Forja'));return}
   STR=CFG.strings||{};LOC=CFG.language||'en';REPO='https://github.com/'+CFG.repo;
   RANK=Object.fromEntries(CFG.tiers.map((x,i)=>[x.id,i]));
   document.documentElement.lang=LOC;
