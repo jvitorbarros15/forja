@@ -119,7 +119,7 @@ export async function agentMain(ctx, file) {
   const ok = r.code === 0 && !!j && !j.is_error, endedAt = new Date().toISOString();
   const done = { status: ok ? 'ok' : 'failed', endedAt, durationMs: j?.duration_ms ?? Date.parse(endedAt) - Date.parse(a.startedAt), tokens: tokensOf(j?.usage), estimated: false };
   let e = null;
-  T.setJob(issue, job => {
+  const record = () => T.setJob(issue, job => {
     const workers = (job.workers ?? []).map(w => (w.id === a.id ? { ...w, ...done } : w));
     if (job.round !== a.round || !(job.running ?? []).includes(slot)) return { workers };
     e = T.agentEnd(job, a, ok, j?.result ?? r.err);
@@ -128,6 +128,8 @@ export async function agentMain(ctx, file) {
     if (e.write) { mkdirSync(dirname(a.out), { recursive: true }); writeFileSync(a.out, e.write); }
     return { ...e.set, workers };
   }, () => e?.event, false);
+  // The answer is already in hand: a busy board lock is waited out rather than losing the agent's work.
+  for (let i = 0; ; i++) try { record(); break; } catch (x) { if (i >= 2 || x.message !== 'board lock busy') throw x; }
   log(`agent ${a.agent} #${issue} ${ok ? 'ok' : 'failed'}${e ? '' : ' (answer dropped: the job already left that round)'}`);
   if (e && !e.write && e.set.stage === 'needs-you') ctx.notify(L('notify.needsYou', { issue, why: e.event }));
 }
@@ -331,7 +333,8 @@ export async function cycle(ctx) {
   if (ctx.dry) { t.steps.forEach(s => dryStep(ctx, s)); return t; }
   const results = [];
   for (const s of t.steps) {
-    const r = execStep(ctx, s);
+    let r;
+    try { r = execStep(ctx, s); } catch (e) { log(`step ${s.step} #${s.issue ?? '-'} not recorded: ${first(e)}`); continue; }
     if (s.command && !r.retry) results.push({ id: s.command, ok: r.ok, failed: r.failed, note: r.note, bg: DEPLOYS.includes(s.step) });
   }
   markCommands(ctx, results);

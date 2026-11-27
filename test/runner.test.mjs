@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadConfig } from '../engine/config.mjs';
 import { quota } from '../engine/models.mjs';
-import { argError, feedQueue, makeCtx, execStep, reapAgents, reapDead, run, runCycle, scanAgents, startAgent, writeIssue } from '../engine/runner.mjs';
+import { argError, cycle, feedQueue, makeCtx, execStep, reapAgents, reapDead, run, runCycle, scanAgents, startAgent, writeIssue } from '../engine/runner.mjs';
 import { paths, readJson } from '../engine/state.mjs';
 
 const REPO = resolve(import.meta.dirname, '..').replaceAll('\\', '/'), FAKE = `${REPO}/test/fixtures/fake-cli.mjs`;
@@ -258,4 +258,12 @@ test('feedQueue labels the first issue whose dependencies are closed', () => {
   assert.deepEqual(E.calls.at(-1).slice(0, 3), ['issue', 'edit', '21']);
   assert.ok(E.calls.at(-1).includes('forja'));
   assert.deepEqual(readJson(E.P.queue), [20]);
+});
+
+test('a step whose board write hits a busy lock does not stop the cycle or lose the other steps', async () => {
+  const E = mkEnv(), file = `${E.J(40)}/after.md`;
+  const T = { tick: () => ({ steps: [{ issue: 39, step: 'x', set: { note: 'a' } }, { issue: 40, step: 'y', do: [{ write: file, text: 'ran' }] }], waiting: [], ignored: [] }), setJob: () => { throw new Error('board lock busy'); } };
+  await cycle(E.ctx({ T }));
+  assert.equal(rd(file), 'ran');
+  assert.ok(E.logs.some(l => /step x #39 not recorded: board lock busy/.test(l)));
 });

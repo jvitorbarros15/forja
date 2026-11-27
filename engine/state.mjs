@@ -14,7 +14,7 @@ export const writeJson = (p, v) => {
 };
 
 // The board has several writers (the runner, each agent's own process, background calls), so every read-change-write
-// holds a lock file. A lock left by a killed process expires after 10 seconds; after 5 seconds of waiting the write goes ahead anyway.
+// holds a lock file. A lock left by a killed process expires after 10 seconds; after 5 seconds of waiting it throws, and the caller tries again on its next cycle.
 export function locked(file, fn) {
   const lock = `${file}.lock`;
   // A lock that vanished between the failed open and this look has age 0: only a lock still there and old is removed,
@@ -23,8 +23,9 @@ export function locked(file, fn) {
   mkdirSync(dirname(lock), { recursive: true });
   let fd = null;
   for (let i = 0; i < 200 && fd === null; i++) try { fd = openSync(lock, 'wx'); } catch { if (age() > 10e3) try { rmSync(lock, { force: true }); } catch {} else pause(25); }
+  if (fd === null) throw new Error('board lock busy');
   // A lock Windows refuses to delete right now is left to expire; the write itself is already done.
-  try { return fn(); } finally { if (fd !== null) { closeSync(fd); try { rmSync(lock, { force: true, maxRetries: 5, retryDelay: 20 }); } catch {} } }
+  try { return fn(); } finally { closeSync(fd); try { rmSync(lock, { force: true, maxRetries: 5, retryDelay: 20 }); } catch {} }
 }
 
 export const field = (text, key) => text.match(new RegExp(`^${key}:[ \\t]*(.*)$`, 'm'))?.[1].trim() || null;

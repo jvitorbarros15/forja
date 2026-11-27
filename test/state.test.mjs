@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { loadConfig } from '../engine/config.mjs';
-import { createBoard, paths, readJson } from '../engine/state.mjs';
+import { createBoard, locked, paths, readJson } from '../engine/state.mjs';
 
 const STATE_URL = new URL('../engine/state.mjs', import.meta.url).href;
 const CONFIG_URL = new URL('../engine/config.mjs', import.meta.url).href;
@@ -157,5 +157,20 @@ test('setJob moves stageSince only when the stage changes, not when running does
     const job = readJson(P.board).jobs[0];
     assert.equal(job.stageSince, first.stageSince);
     assert.notEqual(job.since, first.since);
+  } finally { cleanup(); }
+});
+
+test('locked throws when the lock stays busy and removes one a dead process left behind', () => {
+  const { dir, cleanup } = setup();
+  try {
+    const file = path.join(dir, 'x.json');
+    fs.writeFileSync(`${file}.lock`, '');
+    let ran = 0;
+    assert.throws(() => locked(file, () => ran++), /board lock busy/);
+    assert.equal(ran, 0);
+    const old = new Date(Date.now() - 20e3);
+    fs.utimesSync(`${file}.lock`, old, old);
+    assert.equal(locked(file, () => ++ran), 1);
+    assert.ok(!fs.existsSync(`${file}.lock`));
   } finally { cleanup(); }
 });

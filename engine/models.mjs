@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { locked, writeJson } from './state.mjs';
 
 const HOUR = 3600e3;
 const COOLDOWN = HOUR;
@@ -8,13 +9,6 @@ const file = (stateDir) => path.join(stateDir, 'quota.json');
 
 function readQuota(stateDir) {
   try { return JSON.parse(fs.readFileSync(file(stateDir), 'utf8')); } catch { return { calls: [] }; }
-}
-
-function writeQuota(stateDir, data) {
-  fs.mkdirSync(stateDir, { recursive: true });
-  const tmp = `${file(stateDir)}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
-  fs.renameSync(tmp, file(stateDir));
 }
 
 export function parseEntry(entry) {
@@ -39,13 +33,15 @@ export function quota(stateDir, now = Date.now()) {
 }
 
 export function logCall(stateDir, vendor, issue, kind, limited = false, until = null) {
-  const q = readQuota(stateDir);
-  const cut = Date.now() - 192 * HOUR;
-  q.calls = [
-    ...q.calls.filter((c) => Date.parse(c.at) > cut),
-    { p: vendor, at: new Date().toISOString(), issue, kind, limited, ...(until ? { until } : {}) },
-  ];
-  writeQuota(stateDir, q);
+  locked(file(stateDir), () => {
+    const q = readQuota(stateDir);
+    const cut = Date.now() - 192 * HOUR;
+    q.calls = [
+      ...q.calls.filter((c) => Date.parse(c.at) > cut),
+      { p: vendor, at: new Date().toISOString(), issue, kind, limited, ...(until ? { until } : {}) },
+    ];
+    writeJson(file(stateDir), q);
+  });
 }
 
 export function pick(chain, { avoidVendor, avoidModel, q = {}, multiVendor: multi = false, strict = false } = {}) {

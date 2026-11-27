@@ -135,3 +135,15 @@ test('nextRung walks escalation then null', () => {
   assert.equal(nextRung(cfg, 'hard'), null);
   assert.equal(nextRung(cfg, 'nope'), null);
 });
+
+test('logCall goes through the lock: it throws while another writer holds it and leaves no lock behind', () => {
+  const dir = tmp();
+  try {
+    fs.writeFileSync(path.join(dir, 'quota.json.lock'), '');
+    assert.throws(() => logCall(dir, 'codex', 1, 'build'), /board lock busy/);
+    assert.equal(quota(dir).codex, undefined);
+    fs.rmSync(path.join(dir, 'quota.json.lock'));
+    logCall(dir, 'codex', 1, 'build');
+    assert.deepEqual(fs.readdirSync(dir), ['quota.json']);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
