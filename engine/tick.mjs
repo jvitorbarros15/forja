@@ -185,6 +185,7 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
       const when = later(at, min);
       return { set: { stepFails: { key, n }, retryAt: when }, event: L('event.stepRetry', { step, why, time: hm(when), n, max: STEP_WAIT.length }) };
     }
+    if (step === 'cleanup') return { set: { cleanedAt: new Date(at).toISOString(), stepFails: null, retryAt: null }, event: L('need.stepRepeat', { step, n, why }) };
     const conflict = CONFLICT.test(why);
     const msg = conflict ? L('need.stepConflict', { why }) : min ? L('need.stepStuck', { step, why }) : L('need.stepRepeat', { step, n, why });
     return { set: { stage: 'failed', note: msg, stepFails: null, retryAt: null, need: needOf(job, msg, L(conflict ? 'action.conflict' : 'action.retry')) }, event: L('event.stopped', { why: msg }), stopped: true };
@@ -256,9 +257,13 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
     return miss.length ? L('need.buildNotReviewed', { kinds: miss.join(', ') }) : '';
   }
 
-  // A PR whose head has no checks at all passes once they had NO_CI_WAIT to appear (they start a moment after a push);
-  // pr.requireCi keeps waiting for a check instead.
-  const ciReady = job => job.ci === 'pass' || (job.ci === 'none' && !cfg.pr.requireCi
+  const hasWorkflows = () => {
+    const dir = `${cfg.paths.main}/.github/workflows`;
+    try { return existsSync(dir) && readdirSync(dir).some(f => /\.ya?ml$/i.test(f)); } catch { return false; }
+  };
+  // A PR whose head has no checks at all passes once they had NO_CI_WAIT to appear (they start a moment after a push),
+  // unless pr.requireCi is set or forja-main has GitHub Actions workflows that have not reported yet.
+  const ciReady = job => job.ci === 'pass' || (job.ci === 'none' && !cfg.pr.requireCi && !hasWorkflows()
     && now() - Math.max(Date.parse(job.stageSince ?? job.since ?? 0) || 0, Date.parse(job.prHeadAt ?? 0) || 0) >= NO_CI_WAIT);
 
   // The merge is pinned to the build that was reviewed: a head GitHub has that is not that commit was never reviewed.
@@ -280,10 +285,10 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
     const n = job.issue, dir = J(n), since = Date.parse(job.since ?? 0) || 0;
     const fresh = f => mtime(`${dir}/${f}`) > since;
     const busy = name => job.running?.includes(name) && now() - since < STALE;
-    const runState = kind => {
+    const runState = (kind, after = since) => {
       const r = readJson(`${dir}/run-${kind}.json`, null);
       if (r?.status === 'running') return alive(r.pid, r.startedAt, 'node') ? 'busy' : null;
-      return r?.status === 'failed' && Date.parse(r.endedAt) > since ? L('need.stepCrash', { step: kind, why: String(r.note ?? '').split('\n')[0].slice(0, 160) }) : null;
+      return r?.status === 'failed' && Date.parse(r.endedAt) > after ? L('need.stepCrash', { step: kind, why: String(r.note ?? '').split('\n')[0].slice(0, 160) }) : null;
     };
     const wait = on => ({ wait: on });
     // When a job stops for the owner, a read-only advisor checks the evidence once per stop and leaves a recommendation.
@@ -315,8 +320,8 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
       return x?.includes(':') ? { avoidVendor: parseEntry(x).vendor, avoidModel: parseEntry(x).model } : {};
     };
     // A worktree nothing will use again (merged with no deploy to remove it, a closed PR) is removed once per stage; a redo makes it again.
-    const cleanup = () => existsSync(WT(n)) && !(Date.parse(job.cleanedAt ?? 0) > Date.parse(job.stageSince ?? 0))
-      ? { step: 'cleanup', set: { cleanedAt: new Date(now()).toISOString() }, do: [{ run: call('cleanup', n) }] } : null;
+    const cleanup = () => existsSync(WT(n)) && !(Date.parse(job.cleanedAt ?? 0) > Date.parse(job.stageSince ?? 0)) && !(Date.parse(job.retryAt ?? 0) > now())
+      ? { step: 'cleanup', after: true, set: { cleanedAt: new Date(now()).toISOString() }, do: [{ run: call('cleanup', n) }] } : null;
     const spec = read(`${dir}/spec.md`), tier = field(spec, 'TIER');
 
     switch (job.stage) {
@@ -373,10 +378,12 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
           if (c) return crashed('check', c, [bg('check', n, entry, job.round)]);
           if (fresh('builder.md')) return { step: 'check', set: { running: [] }, do: [bg('check', n, entry, job.round)], event: L('event.builderDone') };
           if (busy('builder')) return wait('builder');
-          const s = runState('setup');
+          const s = runState('setup', Math.max(since, Date.parse(job.retryAt ?? 0) || 0));
           if (s === 'busy') return wait('setup');
-          // A branch that conflicts with main or a bad BRANCH is not fixed by running setup again.
-          if (s) return HOPELESS.test(s) ? { step: 'fail', ...stepFailed(job, 'setup', s) } : crashed('setup', s, [bg('setup', n)]);
+          if (s) {
+            const f = stepFailed(job, 'setup', s);
+            return { step: f.stopped ? 'fail' : 'retry', ...f, ...(f.stopped ? { do: [{ notify: L('notify.stopped', { issue: n, why: f.set.note }) }] } : {}) };
+          }
         } else {
           const r = runState('build');
           if (r === 'busy') return wait('build');
@@ -386,7 +393,7 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
         const cur = entryFor(job.executor, q), d = buildDo(job, cur);
         if (!d) return wait('quota');
         if (isClaude(cur) && (r => r?.status === 'ok' && Date.parse(r.endedAt) > since)(readJson(`${dir}/run-setup.json`, null))) {
-          return { step: 'builder', set: { entry: cur, running: ['builder'] }, do: [agentDo('builder', parseEntry(cur).model, job)], event: L('event.building', { executor: job.executor }) };
+          return { step: 'builder', set: { entry: cur, running: ['builder'], ...(job.stepFails?.key === `setup@${job.round ?? 0}` ? { stepFails: null, retryAt: null } : {}) }, do: [agentDo('builder', parseEntry(cur).model, job)], event: L('event.building', { executor: job.executor }) };
         }
         return { step: 'build', set: { entry: cur }, do: d, event: L(isClaude(cur) ? 'event.settingUp' : 'event.building', { executor: job.executor }) };
       }
@@ -499,11 +506,14 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
     return out;
   }
 
+  const errLine = e => (String(e?.stderr ?? '').trim() || String(e?.message ?? e).trim()).split('\n')[0].slice(0, 200);
+
   function tick({ dryRun = false, issue: only = null } = {}) {
     const b = readJson(P.board, { jobs: [] }), q = quota(), waiting = [], ignored = [];
     // PR state first, so a command acts on the PR's current head and CI.
     const synced = b.jobs.filter(j => j.pr && ['pr', 'needs-you', 'failed'].includes(j.stage) && (!only || j.issue === only));
-    for (const j of synced) try { syncPr(j); } catch {}
+    const syncFailed = new Map(), syncedOk = [];
+    for (const j of synced) try { syncPr(j); syncedOk.push(j); } catch (e) { syncFailed.set(j.issue, errLine(e)); }
     const steps = commandSteps(b, q).filter(s => !only || s.issue === only), commanded = new Set(steps.map(s => s.issue));
 
     // The events call pages through the whole history, so an issue an approver did not label is checked again only when
@@ -525,6 +535,7 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
     for (const job of b.jobs) {
       if (only && job.issue !== only) continue;
       if (job.paused || commanded.has(job.issue) || job.stage === 'deployed') continue;
+      if (syncFailed.has(job.issue)) { waiting.push({ issue: job.issue, stage: job.stage, on: `error: ${syncFailed.get(job.issue)}` }); continue; }
       let s;
       try { s = stepFor(job, q); } catch (e) { waiting.push({ issue: job.issue, stage: job.stage, on: `error: ${String(e?.message ?? e).split('\n')[0]}` }); continue; }
       if (!s) continue;
@@ -545,13 +556,13 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
       // Background calls and the runner write the board too; copy only what this tick read from GitHub.
       const [fresh, changed] = locked(P.board, () => {
         const fresh = readJson(P.board, { jobs: [] }), changed = new Set();
-        for (const j of synced) {
+        for (const j of syncedOk) {
           const f = fresh.jobs.find(x => x.issue === j.issue);
           if (!f) continue;
           if (f.prState !== j.prState || f.ci !== j.ci) changed.add(f);
           Object.assign(f, { prState: j.prState, ci: j.ci, prCmd: j.prCmd, prHead: j.prHead, prHeadAt: j.prHeadAt });
         }
-        if (synced.length) writeJson(P.board, fresh);
+        if (syncedOk.length) writeJson(P.board, fresh);
         return [fresh, changed];
       });
       // A CI rerun can make approve valid again, so the doc recomputes the buttons. A doc older than its job

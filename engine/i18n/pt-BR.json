@@ -80,7 +80,7 @@
   "action.prClosed": "Só você sabe se era para descartar. Refazer com uma nota recomeça a construção; ou deixe parado.",
   "action.ciFailed": "A Forja já tentou corrigir sozinha e para em {rounds} rodadas. Veja o CI no PR; Refazer com uma nota pede a correção.",
   "action.mergeBlocked": "A Forja só faz merge de código revisado. Refazer com uma nota recomeça a rodada.",
-  "action.headMoved": "Alguém fez push no branch, ou a construção revisada nunca foi enviada. Veja o PR: Aprovar envia a construção revisada de novo; Refazer com uma nota recomeça a rodada.",
+  "action.headMoved": "Alguém fez push no branch fora da Forja, então ela não pode sobrescrevê-lo sozinha. Veja o PR e peça ao supervisor para atualizar o branch à mão; depois use Refazer com uma nota.",
   "action.readyTier": "Veja o diff no PR. Aprovar faz o merge; Refazer com uma nota pede mudanças.",
   "action.conflict": "A Forja não resolve conflito sozinha. Peça ao supervisor para atualizar o branch à mão; depois use Refazer com uma nota.",
   "notify.stopped": "Forja #{issue} parou: {why}",

@@ -44,3 +44,10 @@ test('aliases en', () => {
 test('languages lists en and pt-BR', () => {
   assert.deepEqual([...languages()].sort(), ['en', 'pt-BR']);
 });
+
+test('action.headMoved tells the owner to update the branch by hand instead of promising Approve pushes again', () => {
+  assert.doesNotMatch(en['action.headMoved'], /Approve pushes/i);
+  assert.doesNotMatch(ptBR['action.headMoved'], /Aprovar envia/i);
+  assert.match(en['action.headMoved'], /by hand/i);
+  assert.match(ptBR['action.headMoved'], /à mão/i);
+});

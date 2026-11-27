@@ -14,7 +14,7 @@ import { ciLog, deploy, deployTest, pr, runDeploy } from '../engine/ship.mjs';
 import { paths } from '../engine/state.mjs';
 import { effectiveTier } from '../engine/tick.mjs';
 import { triage } from '../engine/triage.mjs';
-import { ensureMain, removeJob, setupJob } from '../engine/worktree.mjs';
+import { cleanMain, ensureMain, removeJob, setupJob } from '../engine/worktree.mjs';
 
 const REPO = resolve(import.meta.dirname, '..').replaceAll('\\', '/');
 const FAKE = `${REPO}/test/fixtures/fake-cli.mjs`, CALL = `${REPO}/engine/call.mjs`;
@@ -447,6 +447,80 @@ test('pr pushes the branch, fills the body template and returns the PR number; a
   put(`${E.J(51)}/decision.md`, '');
   list = '[]';
   assert.equal(pr(E.cfg, 51, { gh }), 12);
+});
+
+test('pr falls back to spec COMMIT and default body when decision.md is ESCALATE', () => {
+  const E = mkEnv({ pr: { bodyTemplate: 'Closes #{issue}\n\n{summary}' } }), wt = job(E, 52), seen = [];
+  put(`${wt}/src/a.js`, 'export const a = 2;\n');
+  g(wt, 'commit', '-qam', 'Add job 52');
+  put(`${E.J(52)}/decision.md`, 'ESCALATE\nTier: B\nPR body:\nReason: needs owner review\n');
+  const gh = (...a) => { seen.push(a); return a[0] === 'pr' && a[1] === 'list' ? '[]' : 'https://github.com/o/r/pull/15\n'; };
+  assert.equal(pr(E.cfg, 52, { gh }), 15);
+  const create = seen.find(a => a[1] === 'create');
+  assert.equal(create[create.indexOf('--title') + 1], 'Add job 52');
+  assert.equal(create[create.indexOf('--body') + 1], 'Closes #52\n\nBuilt by Forja; approved by the owner after the checks passed.');
+});
+
+test('setupJob on a reused worktree re-runs checks.install only when merged main changed dependency files', () => {
+  const E = mkEnv({ checks: { install: `node -e "const f=require('fs'),p=require('path');if(p.basename(process.cwd())!=='forja-main'&&f.existsSync('{project}/fail.flag'))process.exit(1);f.appendFileSync('install.log','x')"` } });
+  const wt = job(E, 53);
+  const wtRuns = () => (existsSync(`${wt}/install.log`) ? rd(`${wt}/install.log`).length : 0);
+  assert.equal(wtRuns(), 1);
+  put(`${wt}/src/a.js`, 'export const a = 2;\n');
+  g(wt, 'commit', '-qam', 'Update a');
+  rmSync(`${wt}/install.log`);
+  E.pushOrigin('docs/note.md', 'hi\n');
+  setupJob(E.cfg, 53);
+  assert.equal(existsSync(`${wt}/docs/note.md`), true);
+  assert.equal(wtRuns(), 0);
+  E.pushOrigin('package-lock.json', '{"lockfileVersion":3}\n');
+  put(`${E.project}/fail.flag`, '1');
+  assert.throws(() => setupJob(E.cfg, 53));
+  assert.equal(existsSync(`${wt}/package-lock.json`), false);
+  rmSync(`${E.project}/fail.flag`);
+  setupJob(E.cfg, 53);
+  assert.equal(existsSync(`${wt}/package-lock.json`), true);
+  assert.equal(wtRuns(), 1);
+});
+
+test('ensureMain, cleanMain, setupJob and goldfish leave forja-main untouched while a deploy or deploy-test runs', async () => {
+  const E = mkEnv(FAKES), { main, state } = E.cfg.paths;
+  ensureMain(E.cfg);
+  for (const kind of ['deploy', 'deploy-test']) {
+    put(`${main}/README.md`, 'deploy edit\n');
+    put(`${main}/build-out.txt`, 'artifact\n');
+    put(`${state}/run-${kind}.json`, { kind, status: 'running', pid: process.pid, startedAt: new Date().toISOString() });
+    E.pushOrigin(`docs/${kind}.md`, `${kind}\n`);
+    cleanMain(main, state);
+    ensureMain(E.cfg);
+    put(`${E.J(54)}/spec.md`, SPEC(54));
+    setupJob(E.cfg, 54);
+    assert.equal(rd(`${main}/README.md`).replaceAll('\r\n', '\n'), 'deploy edit\n');
+    assert.equal(existsSync(`${main}/build-out.txt`), true);
+    assert.equal(existsSync(`${E.WT(54)}/docs/${kind}.md`), true);
+    const gRes = await withEnv({ FAKE_TEXT: 'VERDICT: OK\n- ok' }, () => goldfish(E.cfg, 54, 'codex:sol'));
+    assert.equal(gRes.status, 'ok');
+    assert.equal(rd(`${main}/README.md`).replaceAll('\r\n', '\n'), 'deploy edit\n');
+    assert.equal(existsSync(`${main}/build-out.txt`), true);
+    removeJob(E.cfg, 54);
+    rmSync(`${state}/run-${kind}.json`);
+    ensureMain(E.cfg);
+    assert.equal(rd(`${main}/README.md`).replaceAll('\r\n', '\n'), 'a\n');
+    assert.equal(existsSync(`${main}/build-out.txt`), false);
+    assert.equal(existsSync(`${main}/docs/${kind}.md`), true);
+  }
+});
+
+test('removeJob removes a worktree with untracked files, and call.mjs cleanup exits non-zero when the worktree remains', () => {
+  const E = mkEnv(), wt = job(E, 55), cli = (...a) => spawnSync(process.execPath, [CALL, '--project', E.project, ...a], { encoding: 'utf8' });
+  put(`${wt}/untracked.tmp`, 'left behind\n');
+  removeJob(E.cfg, 55);
+  assert.equal(existsSync(wt), false);
+  mkdirSync(E.WT(56), { recursive: true });
+  put(`${E.WT(56)}/file.txt`, 'not a git worktree\n');
+  const r = cli('cleanup', '56');
+  assert.notEqual(r.status, 0);
+  assert.equal(existsSync(E.WT(56)), true);
 });
 
 test('cilog writes the failed CI lines as the round owner note', () => {

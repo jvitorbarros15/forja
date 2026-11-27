@@ -1,11 +1,12 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, lstatSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { t } from './i18n.mjs';
-import { linkDir } from './platform.mjs';
-import { field, git, locked, paths, read } from './state.mjs';
+import { alive, linkDir } from './platform.mjs';
+import { field, git, locked, paths, read, readJson } from './state.mjs';
 import { tail } from './vendors/proc.mjs';
 
-const MIN = 60e3;
+const MIN = 60e3, DEPLOYS = ['deploy', 'deploy-test'];
+export const deploying = state => !!state && DEPLOYS.some(k => (r => r?.status === 'running' && alive(r.pid, r.startedAt, 'node'))(readJson(`${state}/run-${k}.json`, null)));
 
 // A command that timed out or never started has no exit code; it must count as failed, never as passed.
 export const sh = (cwd, cmd, env = {}, timeout = 40 * MIN) => {
@@ -26,6 +27,7 @@ const install = (cfg, dir) => {
 };
 
 const DEPS = /(^|\/)(package\.json|package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb)$/;
+const depsChanged = (dir, a, b) => git(dir, 'diff', '--name-only', '-z', a, b).split('\0').some(f => DEPS.test(f));
 
 // A package.json with dependencies and no node_modules is a missing install; one without dependencies, or a Yarn
 // Plug'n'Play project, never gets a node_modules, so that must not reinstall on every call.
@@ -44,7 +46,7 @@ function syncDeps(cfg) {
     const head = git(main, 'rev-parse', 'HEAD').trim(), done = existsSync(marker) ? read(marker).trim() : '';
     let stale = !done || missingModules(main);
     if (!stale && done !== head) {
-      try { stale = git(main, 'diff', '--name-only', '-z', done, head).split('\0').some(f => DEPS.test(f)); } catch { stale = true; }
+      try { stale = depsChanged(main, done, head); } catch { stale = true; }
     }
     if (!stale) return writeFileSync(marker, head);
     rmSync(marker, { force: true });
@@ -55,8 +57,8 @@ function syncDeps(cfg) {
 
 // forja-main belongs to Forja: what an agent, a vendor CLI or an install left in it is discarded, so the config and the agent
 // overrides read from it are the merged ones. Ignored files and node_modules stay.
-export function cleanMain(main) {
-  if (!existsSync(`${main}/.git`)) return;
+export function cleanMain(main, state = null) {
+  if (!existsSync(`${main}/.git`) || deploying(state)) return;
   if (!git(main, 'status', '--porcelain').split('\n').some(l => l.trim() && !/^\?\? node_modules\/?$/.test(l))) return;
   git(main, 'reset', '-q', '--hard', 'HEAD');
   git(main, 'clean', '-qfd', '-e', 'node_modules', '-e', '.pnp.*');
@@ -64,11 +66,14 @@ export function cleanMain(main) {
 
 // forja-main only ever fast-forwards to the default branch. Nothing is run in the project checkout but fetch and worktree add.
 // `install: false` skips the dependency install, which can take minutes: the runner uses it before a spec so one job's install never holds up the others.
-export function ensureMain(cfg, { install = true } = {}) {
-  const { project, main } = cfg.paths;
+export function ensureMain(cfg, { install = true, force = false } = {}) {
+  const { project, main, state } = cfg.paths;
   git(project, 'fetch', '-q', 'origin', cfg.defaultBranch);
-  if (existsSync(main)) { cleanMain(main); git(main, 'merge', '-q', '--ff-only', `origin/${cfg.defaultBranch}`); }
-  else git(project, 'worktree', 'add', '-q', '--detach', main, `origin/${cfg.defaultBranch}`);
+  if (existsSync(main)) {
+    if (!force && deploying(state)) return;
+    cleanMain(main);
+    git(main, 'merge', '-q', '--ff-only', `origin/${cfg.defaultBranch}`);
+  } else git(project, 'worktree', 'add', '-q', '--detach', main, `origin/${cfg.defaultBranch}`);
   if (install) syncDeps(cfg);
 }
 
@@ -90,7 +95,14 @@ export function setupJob(cfg, n, branch) {
   ensureMain(cfg);
   // Each round starts on the current main, so the checks here see what CI sees (CI tests the merge with main).
   if (existsSync(wt)) {
-    if (!dirty(wt)) mergeMain(cfg, wt);
+    if (!dirty(wt)) {
+      const before = git(wt, 'rev-parse', 'HEAD').trim();
+      mergeMain(cfg, wt);
+      const after = git(wt, 'rev-parse', 'HEAD').trim();
+      if (cfg.checks.install && before !== after && depsChanged(wt, before, after)) {
+        try { install(cfg, wt); } catch (e) { try { git(wt, 'reset', '-q', '--hard', before); } catch {} throw e; }
+      }
+    }
     if (!cfg.checks.install) link(cfg, wt);
     return;
   }
@@ -113,5 +125,5 @@ export function removeJob(cfg, n) {
   if (!existsSync(wt)) return;
   // Unlinked first: removing the worktree must never reach through the link into forja-main's node_modules.
   if (linked(wt)) unlinkSync(`${wt}/node_modules`);
-  git(cfg.paths.project, 'worktree', 'remove', wt);
+  git(cfg.paths.project, 'worktree', 'remove', '--force', wt);
 }

@@ -460,6 +460,18 @@ test('a repo without CI merges after the checks had three minutes to show up; pr
   assert.deepEqual(T.stepFor(pr({ ci: 'pending' }), {}), { wait: 'ci' });
 });
 
+test('a repo with .github/workflows keeps waiting on ci: none past three minutes instead of merging unchecked', () => {
+  const C = mkEnv(MULTI);
+  reviewed(C, 124);
+  const pr = o => job({ issue: 124, stage: 'pr', pr: 9, prState: 'open', ci: 'none', tier: 'A', reviews: R, stageSince: later(-4 * 60e3), prHeadAt: later(-4 * 60e3), ...o });
+  put(`${C.cfg.paths.main}/.github/workflows/ci.yml`, 'on: pull_request\n');
+  assert.deepEqual(C.T.stepFor(pr(), {}), { wait: 'ci' });
+  assert.equal(C.T.stepFor(pr({ ci: 'pass' }), {}).step, 'merge');
+  rmSync(`${C.cfg.paths.main}/.github/workflows/ci.yml`);
+  put(`${C.cfg.paths.main}/.github/workflows/README.md`, 'none\n');
+  assert.equal(C.T.stepFor(pr(), {}).step, 'merge');
+});
+
 test('an empty check rollup is recorded as none, and a new head restarts the grace period', () => {
   const C = mkEnv(MULTI);
   reviewed(C, 123);
@@ -586,7 +598,7 @@ test('claude-only medium build runs the builder agent on sonnet', () => {
   assert.deepEqual(s.do.map(d => d.bg && d.bg.slice(-2).join(' ')), ['setup 1']);
 });
 
-test('the Claude builder starts only once setup, run in the background, has finished; a failed setup is tried again once', () => {
+test('the Claude builder starts only once setup, run in the background, has finished; a failed setup backs off 1/5/15 min before failing', () => {
   const C = mkEnv(CLAUDE_ONLY), j = o => job({ issue: 3, stage: 'build', executor: 'medium', entry: 'claude:sonnet', since: later(-60e3), ...o });
   const run = o => put(`${C.J(3)}/run-setup.json`, { kind: 'setup', pid: process.pid, startedAt: later(-30e3), ...o });
   const first = C.T.stepFor(j(), {});
@@ -601,11 +613,25 @@ test('the Claude builder starts only once setup, run in the background, has fini
   assert.deepEqual({ ...s.do[0], prompt: undefined }, { agent: 'builder', model: 'sonnet', issue: 3, round: 1, out: `${C.J(3)}/builder.md`, cwd: C.cfg.paths.main, prompt: undefined });
   run({ status: 'ok', endedAt: later(-120e3) });
   assert.equal(C.T.stepFor(j(), {}).step, 'build');
+  let cur = j();
+  for (const [n, min] of [[1, 1], [2, 5], [3, 15]]) {
+    run({ status: 'failed', endedAt: later(-20e3), note: 'npm ci failed' });
+    const retry = C.T.stepFor(cur, {});
+    assert.equal(retry.step, 'retry');
+    assert.equal(retry.do, undefined);
+    assert.deepEqual(retry.set.stepFails, { key: 'setup@1', n });
+    assert.ok(Math.abs(Date.parse(retry.set.retryAt) - Date.now() - min * 60e3) < 5e3);
+    assert.deepEqual(C.T.stepFor({ ...cur, ...retry.set }, {}), { wait: 'retry' });
+    const due = { ...cur, ...retry.set, retryAt: later(-10e3) };
+    const relaunch = C.T.stepFor(due, {});
+    assert.equal(relaunch.step, 'build');
+    assert.match(sh(relaunch.do[0]), / setup 3$/);
+    cur = { ...due, retryAt: later(-30e3) };
+  }
   run({ status: 'failed', endedAt: later(-20e3), note: 'npm ci failed' });
-  const retry = C.T.stepFor(j(), {});
-  assert.equal(retry.step, 'retry');
-  assert.match(sh(retry.do[0]), / setup 3$/);
-  assert.equal(C.T.stepFor(j({ stepRetry: ['setup@1'] }), {}).step, 'fail');
+  const stopped = C.T.stepFor(cur, {});
+  assert.equal(stopped.step, 'fail');
+  assert.equal(stopped.set.stage, 'failed');
   run({ status: 'failed', endedAt: later(-20e3), note: 'conflict while bringing main into the branch' });
   const conflict = C.T.stepFor(j(), {});
   assert.equal(conflict.step, 'fail');
@@ -810,11 +836,23 @@ test('a job that throws does not abort the other jobs in the tick', () => {
   const C = mkEnv(MULTI);
   put(`${C.J(23)}/build.md`, 'BUILD: OK\nExecutor: claude:sonnet\n');
   put(C.P.board, { jobs: [job({ issue: 23, stage: 'build', tier: 'Z', executor: 'medium', entry: 'claude:sonnet' }), job({ issue: 24, stage: 'pr', pr: 9, prState: 'open', ci: 'pending', tier: 'A', reviews: R })] });
-  const r = createTick(C.cfg, { gh: (...a) => (a[0] === 'issue' && a[1] === 'list' ? '[]' : '') }).tick({ dryRun: true });
+  const r = createTick(C.cfg, { gh: prGh([], { statusCheckRollup: [{ status: 'IN_PROGRESS' }] }) }).tick({ dryRun: true });
   assert.equal(r.waiting.length, 2);
   assert.equal(r.waiting[0].issue, 23);
   assert.ok(r.waiting[0].on.startsWith('error: '));
   assert.deepEqual(r.waiting[1], { issue: 24, stage: 'pr', on: 'ci' });
+});
+
+test('a syncPr failure is surfaced in waiting instead of being swallowed', () => {
+  const C = mkEnv(MULTI);
+  put(C.P.board, { jobs: [job({ issue: 25, stage: 'pr', pr: 9, prState: 'open', ci: 'pending', tier: 'A', reviews: R })] });
+  const gh = (...a) => {
+    if (a[0] === 'issue' && a[1] === 'list') return '[]';
+    throw Object.assign(new Error('gh failed'), { stderr: 'gh: Bad credentials (HTTP 401)\n' });
+  };
+  const r = createTick(C.cfg, { gh }).tick({ dryRun: true });
+  assert.deepEqual(r.steps, []);
+  assert.deepEqual(r.waiting, [{ issue: 25, stage: 'pr', on: 'error: gh: Bad credentials (HTTP 401)' }]);
 });
 
 test('a PR command written before the advisor launched is still seen, and is spent once consumed', () => {
@@ -876,7 +914,13 @@ test('a worktree nothing will use again is removed: merged without a deploy comm
   mkdirSync(C.WT(140), { recursive: true });
   const m = C.T.stepFor(job({ issue: 140, stage: 'merged', tier: 'A', stageSince: at }), {});
   assert.equal(m.step, 'cleanup');
+  assert.equal(m.after, true);
   assert.equal(sh(m.do[0]).split(' ').slice(-2).join(' '), 'cleanup 140');
+  assert.equal(C.T.stepFor(job({ issue: 140, stage: 'merged', tier: 'A', stageSince: at, retryAt: later(60e3) }), {}), null);
+  const giveUp = C.T.stepFailed(job({ issue: 140, stage: 'merged', tier: 'A', stepFails: { key: 'cleanup@1', n: 3 } }), 'cleanup', 'locked');
+  assert.equal(giveUp.stopped, undefined);
+  assert.equal(giveUp.set.stage, undefined);
+  assert.ok(giveUp.set.cleanedAt);
   assert.deepEqual(C.T.stepFor(job({ issue: 140, stage: 'merged', tier: 'A', stageSince: at, cleanedAt: later(-30e3) }), {}), null);
   assert.equal(C.T.stepFor(job({ issue: 140, stage: 'merged', tier: 'A', stageSince: later(-10e3), cleanedAt: at }), {}).step, 'cleanup');
   assert.equal(C.T.stepFor(job({ issue: 141, stage: 'merged', tier: 'A', stageSince: at }), {}), null);

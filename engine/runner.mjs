@@ -3,13 +3,13 @@
 //   node runner.mjs --project <dir> --agent <file> runs one Claude agent to its end; the runner starts one such process per agent.
 //   node runner.mjs --launch <script> [args] is the detached launcher of every background process on Windows (see launch).
 import { spawn, spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, openSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ConfigError, loadProjectConfig, mainDirOf } from './config.mjs';
 import { t } from './i18n.mjs';
 import { logCall } from './models.mjs';
-import { IS_WIN, alive, killTree, notify as platformNotify, spawnDetached } from './platform.mjs';
+import { IS_WIN, alive, gone, killTree, notify as platformNotify, spawnDetached } from './platform.mjs';
 import { roles } from './registry.mjs';
 import { bestEffort, gh as realGh, git, idsOf, locked, paths, read, readCommands, readJson, writeJson } from './state.mjs';
 import { createTick } from './tick.mjs';
@@ -63,14 +63,26 @@ export function launch(ctx, argv, { logFile } = {}) {
   return c;
 }
 
-function acquireLock(file, L) {
+export function acquireLock(file, L) {
   mkdirSync(dirname(file), { recursive: true });
-  if (existsSync(file)) {
-    const pid = Number(read(file).trim());
-    if (pid && pid !== process.pid && alive(pid, statSync(file).mtimeMs, 'node')) throw new Error(L('runner.alreadyRunning', { pid }));
+  const look = () => { try { return `${readFileSync(file, 'utf8').trim()}@${statSync(file).mtimeMs}`; } catch { return null; } };
+  const pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  for (let i = 0; i < 20; i++) {
+    let fd;
+    try { fd = openSync(file, 'wx'); } catch (e) {
+      if (e.code !== 'EEXIST') throw e;
+      const seen = look();
+      if (!seen) continue;
+      const [raw, mt] = seen.split('@'), pid = Number(raw), mtime = Number(mt);
+      if (raw === '' && Date.now() - mtime < 1000 && i < 18) { pause(25); continue; }
+      if (pid && pid !== process.pid && !gone(pid, mtime, 'node')) throw new Error(L('runner.alreadyRunning', { pid }));
+      if (look() === seen) try { unlinkSync(file); } catch {}
+      continue;
+    }
+    try { writeSync(fd, String(process.pid)); } finally { closeSync(fd); }
+    return () => { try { if (Number(read(file).trim()) === process.pid) unlinkSync(file); } catch {} };
   }
-  writeFileSync(file, String(process.pid));
-  return () => { try { if (Number(read(file).trim()) === process.pid) unlinkSync(file); } catch {} };
+  throw new Error(L('runner.alreadyRunning', { pid: Number(read(file).trim()) || '?' }));
 }
 
 const tokensOf = (u = {}) => {
@@ -262,16 +274,20 @@ export function feedQueue(ctx) {
   const queue = readJson(P.queue, []);
   if (!queue.length) return;
   const ghj = (...a) => JSON.parse(ctx.gh(...a)), R = cfg.repo;
+  const drop = n => locked(P.queue, () => {
+    const cur = readJson(P.queue, []), next = cur.filter(x => x !== n);
+    if (next.length !== cur.length) writeJson(P.queue, next);
+  });
   const open = ghj('issue', 'list', '-R', R, '--label', cfg.intakeLabel, '--state', 'open', '--json', 'number').map(i => i.number);
   const done = new Set(readJson(P.board, { jobs: [] }).jobs.filter(j => ['merged', 'deployed', 'needs-you', 'failed'].includes(j.stage)).map(j => j.issue));
   if (open.filter(n => !done.has(n)).length >= cfg.queue.max) return;
   for (const n of queue) {
     const i = ghj('issue', 'view', String(n), '-R', R, '--json', 'state,body,labels');
-    if (i.state !== 'OPEN' || i.labels.some(l => l.name === cfg.intakeLabel)) { writeJson(P.queue, queue.filter(x => x !== n)); continue; }
+    if (i.state !== 'OPEN' || i.labels.some(l => l.name === cfg.intakeLabel)) { drop(n); continue; }
     const deps = [...(i.body.match(/^Depends on: (.+)$/m)?.[1] ?? '').matchAll(/#(\d+)/g)].map(m => m[1]);
     if (deps.some(d => ghj('issue', 'view', d, '-R', R, '--json', 'state').state === 'OPEN')) continue;
     ctx.gh('issue', 'edit', String(n), '-R', R, '--add-label', cfg.intakeLabel);
-    writeJson(P.queue, queue.filter(x => x !== n));
+    drop(n);
     log(`queue: #${n} got the ${cfg.intakeLabel} label`);
     return;
   }
@@ -354,7 +370,7 @@ export async function runCycle(project, o) {
   let error = null, t = null;
   try {
     // A deploy builds inside forja-main, so it is left alone while one runs.
-    if (!DEPLOYS.some(k => (r => r?.status === 'running' && alive(r.pid, r.startedAt, 'node'))(readJson(`${stateDir(project)}/run-${k}.json`, null)))) try { cleanMain(mainDirOf(project)); } catch {}
+    try { cleanMain(mainDirOf(project), stateDir(project)); } catch {}
     t = await cycle(makeCtx(loadProjectConfig(project), o));
   } catch (e) {
     error = e instanceof ConfigError ? e.errors.join('; ').slice(0, 400) : first(e);

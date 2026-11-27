@@ -80,7 +80,7 @@
   "action.prClosed": "Only you know whether it was meant to be discarded. Redo with a note restarts the build; or leave it stopped.",
   "action.ciFailed": "Forja already tried to fix it on its own and stops after {rounds} rounds. See the CI on the PR; Redo with a note asks for the fix.",
   "action.mergeBlocked": "Forja only merges reviewed code. Redo with a note restarts the round.",
-  "action.headMoved": "Someone pushed to the branch, or the reviewed build was never pushed. Look at the PR: Approve pushes the reviewed build again; Redo with a note restarts the round.",
+  "action.headMoved": "Someone pushed to the branch outside Forja, so Forja cannot push over it on its own. Look at the PR and ask the supervisor to update the branch by hand; then use Redo with a note.",
   "action.readyTier": "See the diff on the PR. Approve merges it; Redo with a note asks for changes.",
   "action.conflict": "Forja does not resolve conflicts on its own. Ask the supervisor to update the branch by hand; then use Redo with a note.",
   "notify.stopped": "Forja #{issue} stopped: {why}",

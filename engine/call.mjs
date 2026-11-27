@@ -3,6 +3,7 @@
 //   node call.mjs --project <dir> <command> ...
 //   setup <n> | build <n> <entry> <round> | check <n> <entry> <round> | review <n> <kind> <entry> <round>
 //   goldfish <n> <entry> | pr <n> | cleanup <n> | deploy <id...> | deploy-test <id...> | cilog <n> <round> <pr> | triage <n> | log <vendor> <n> [kind]
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { check } from './checks.mjs';
@@ -12,7 +13,7 @@ import { logCall } from './models.mjs';
 import { ciLog, pr, runDeploy, tracked } from './ship.mjs';
 import { ID_RE } from './tick.mjs';
 import { triage } from './triage.mjs';
-import { bestEffort } from './state.mjs';
+import { bestEffort, paths } from './state.mjs';
 import { removeJob, setupJob } from './worktree.mjs';
 
 const int = s => (/^\d+$/.test(String(s)) ? Number(s) : null);
@@ -39,7 +40,11 @@ export async function run(argv) {
   else if (cmd === 'review' && KIND.test(a[0] ?? '') && ENTRY.test(a[1] ?? '') && round !== null) return step(`review-${a[0]}`, () => review(cfg, n, a[0], a[1], round), `review-${a[0]}`, a[1], round);
   else if (cmd === 'goldfish' && ENTRY.test(a[0] ?? '')) return step('goldfish', () => goldfish(cfg, n, a[0]), 'goldfish', a[0], 0);
   else if (cmd === 'pr') console.log(pr(cfg, n));
-  else if (cmd === 'cleanup') try { removeJob(cfg, n); } catch {}
+  else if (cmd === 'cleanup') {
+    const wt = paths(cfg).wt(n);
+    try { removeJob(cfg, n); } catch (e) { if (existsSync(wt)) throw e; }
+    if (existsSync(wt)) throw new Error(`worktree still exists: ${wt}`);
+  }
   else if (cmd === 'cilog' && int(a[0]) !== null && int(a[1]) !== null) ciLog(cfg, n, int(a[0]), int(a[1]));
   else if (cmd === 'triage') console.log(JSON.stringify(await triage(cfg, n)));
   else return bad();

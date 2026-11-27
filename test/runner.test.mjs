@@ -1,14 +1,14 @@
 // The runner: cycle, step executor, agent launcher and reaper. Each env is a temp git repo with a bare "origin";
 // claude is the fake CLI, gh is a fake function and agents/launchers are stubbed unless a test runs one for real. No network.
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadConfig } from '../engine/config.mjs';
 import { quota } from '../engine/models.mjs';
-import { argError, cycle, feedQueue, launch, makeCtx, execStep, reapAgents, reapDead, run, runCycle, scanAgents, startAgent, writeIssue } from '../engine/runner.mjs';
+import { acquireLock, argError, cycle, feedQueue, launch, makeCtx, execStep, reapAgents, reapDead, run, runCycle, scanAgents, startAgent, writeIssue } from '../engine/runner.mjs';
 import { paths, readJson } from '../engine/state.mjs';
 import { ensureMain } from '../engine/worktree.mjs';
 
@@ -351,4 +351,58 @@ test('reapDead keeps going when the commands file is busy: a dead run is still c
   rmSync(`${E.P.commands}.lock`, { force: true });
   reapDead(ctx);
   assert.equal(readJson(E.P.commands)[0].status, 'failed');
+});
+
+test('feedQueue updates queue.json under its lock without overwriting concurrent edits', () => {
+  const E = mkEnv(), view = { 20: { state: 'CLOSED', body: '', labels: [] }, 21: { state: 'OPEN', body: '', labels: [] } };
+  put(E.P.queue, [20, 21]);
+  const lock = `${E.P.queue}.lock`;
+  put(lock, '0');
+  utimesSync(lock, 0, 0);
+  E.on((...a) => {
+    if (a[0] === 'issue' && a[1] === 'list') return '[]';
+    if (a[1] === 'view') {
+      if (a[2] === '21') put(E.P.queue, [...readJson(E.P.queue, []), 99]);
+      return JSON.stringify(view[a[2]]);
+    }
+    return '';
+  });
+  feedQueue(E.ctx());
+  assert.equal(existsSync(lock), false);
+  assert.deepEqual(readJson(E.P.queue), [99]);
+});
+
+test('acquireLock is atomic across concurrent processes and takes over a dead PID lock', async () => {
+  const E = mkEnv(), lock = `${E.state}/.runner.lock`;
+  put(lock, String(deadPid()));
+  const release = acquireLock(lock, (_, v) => `already running ${v.pid}`);
+  assert.equal(rd(lock), String(process.pid));
+  release();
+  assert.equal(existsSync(lock), false);
+
+  const mod = new URL('../engine/runner.mjs', import.meta.url).href;
+  const code = `const { acquireLock } = await import(${JSON.stringify(mod)});
+    try {
+      const rel = acquireLock(${JSON.stringify(lock)}, (_, v) => 'already running ' + v.pid);
+      console.log('ok');
+      process.stdin.resume();
+      process.stdin.on('end', () => { rel(); process.exit(0); });
+    } catch (e) { console.log('err:' + e.message); }`;
+  const kids = [1, 2, 3, 4].map(() => spawn(process.execPath, ['--input-type=module', '-e', code], { stdio: ['pipe', 'pipe', 'pipe'] }));
+  const line = c => new Promise((ok, bad) => {
+    let out = '', err = '';
+    c.stdout.on('data', d => { out += d; if (out.includes('\n')) ok(out.trim()); });
+    c.stderr.on('data', d => (err += d));
+    c.on('close', () => ok(out.trim() || `stderr:${err.trim()}`));
+    c.on('error', bad);
+  });
+  try {
+    const outs = await Promise.all(kids.map(line));
+    assert.equal(outs.filter(o => o === 'ok').length, 1, outs.join(', '));
+    assert.equal(outs.filter(o => o.startsWith('err:already running')).length, 3, outs.join(', '));
+  } finally {
+    for (const c of kids) c.stdin.end();
+    await Promise.all(kids.map(c => new Promise(r => (c.exitCode !== null ? r() : c.on('close', r)))));
+  }
+  assert.equal(existsSync(lock), false);
 });

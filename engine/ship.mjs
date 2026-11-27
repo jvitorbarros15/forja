@@ -28,8 +28,9 @@ export async function tracked(cfg, n, kind, fn, { file, extra = {}, w = null, T 
 
 export function pr(cfg, n, { gh = realGh } = {}) {
   const P = paths(cfg), dir = P.jobs(n), d = read(`${dir}/decision.md`), spec = read(`${dir}/spec.md`), branch = field(spec, 'BRANCH'), wt = P.wt(n);
-  // Without decision.md the owner approved a passing build by hand.
-  const title = d ? field(d, 'PR title') : field(spec, 'COMMIT'), summary = d ? d.match(/^PR body:[ \t]*([\s\S]*?)^Reason:/m)?.[1].trim() : t(cfg.language, 'pr.defaultBody');
+  // Only an APPROVE decision carries PR text; an ESCALATE or absent file falls back to the spec and default body.
+  const approved = /^APPROVE[ \t]*\r?\n/.test(d);
+  const title = approved ? field(d, 'PR title') : field(spec, 'COMMIT'), summary = approved ? d.match(/^PR body:[ \t]*([\s\S]*?)^Reason:/m)?.[1].trim() : t(cfg.language, 'pr.defaultBody');
   if (!new RegExp(cfg.commit.pattern).test(title ?? '') || !summary) throw new Error('decision.md needs a commit-style PR title and a PR body');
   if (!new RegExp(`^forja/${n}-[a-z0-9-]+$`).test(branch ?? '') || git(wt, 'rev-parse', '--abbrev-ref', 'HEAD').trim() !== branch) throw new Error(`BRANCH in spec.md (${branch}) is not a forja/${n}-… branch checked out in the worktree`);
   git(wt, 'push', '-q', '-u', 'origin', branch);
@@ -42,7 +43,7 @@ export function pr(cfg, n, { gh = realGh } = {}) {
 // deploy and deployTest run in forja-main, after it is fast-forwarded to the default branch; at most one runs at a time.
 function runIn(cfg, key, retry) {
   if (!cfg.checks[key]) throw new Error(t(cfg.language, 'refuse.noDeployCommand'));
-  ensureMain(cfg);
+  ensureMain(cfg, { force: true });
   for (let attempt = 0; ; attempt++) {
     const r = sh(cfg.paths.main, expand(cfg, cfg.checks[key])), s = `${r.stdout}${r.stderr}`;
     if (!r.status) return s;

@@ -124,6 +124,6 @@ export async function goldfish(cfg, n, entry) {
   const P = paths(cfg);
   try { return await judge(cfg, n, 'goldfish', entry, { cwd: P.main, file: `${P.jobs(n)}/spec-review.md`, verdicts: 'OK|GAPS', vars: { spec: read(`${P.jobs(n)}/spec.md`) } }); } finally {
     // A CLI that edited forja-main fails the check; what it wrote must not stay behind.
-    try { cleanMain(P.main); } catch {}
+    try { cleanMain(P.main, cfg.paths.state); } catch {}
   }
 }
