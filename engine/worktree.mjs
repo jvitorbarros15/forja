@@ -1,8 +1,8 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, lstatSync, mkdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { t } from './i18n.mjs';
 import { linkDir } from './platform.mjs';
-import { field, git, paths, read } from './state.mjs';
+import { field, git, locked, paths, read } from './state.mjs';
 import { tail } from './vendors/proc.mjs';
 
 const MIN = 60e3;
@@ -27,21 +27,30 @@ const install = (cfg, dir) => {
 
 const DEPS = /(^|\/)(package\.json|package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb)$/;
 
+// A package.json with dependencies and no node_modules is a missing install; one without dependencies, or a Yarn
+// Plug'n'Play project, never gets a node_modules, so that must not reinstall on every call.
+const missingModules = main => {
+  if (!existsSync(`${main}/package.json`) || existsSync(`${main}/node_modules`) || existsSync(`${main}/.pnp.cjs`)) return false;
+  try { const p = JSON.parse(read(`${main}/package.json`)); return Object.keys({ ...p.dependencies, ...p.devDependencies }).length > 0; } catch { return false; }
+};
+
 // The marker holds the commit whose dependencies are installed in forja-main. It lives outside the worktree, and a failed
 // install removes it, so the next call tries again.
 function syncDeps(cfg) {
-  const { main, worktreeRoot } = cfg.paths, marker = `${worktreeRoot}/forja-main.installed`, head = git(main, 'rev-parse', 'HEAD').trim();
+  const { main, worktreeRoot } = cfg.paths, marker = `${worktreeRoot}/forja-main.installed`;
   if (!cfg.checks.install) return;
-  const done = existsSync(marker) ? read(marker).trim() : '';
-  let stale = !done || (existsSync(`${main}/package.json`) && !existsSync(`${main}/node_modules`));
-  if (!stale && done !== head) {
-    try { stale = git(main, 'diff', '--name-only', done, head).split('\n').some(f => DEPS.test(f)); } catch { stale = true; }
-  }
-  if (!stale) return writeFileSync(marker, head);
-  rmSync(marker, { force: true });
-  install(cfg, main);
-  mkdirSync(worktreeRoot, { recursive: true });
-  writeFileSync(marker, head);
+  // The runner and every job's process come here, so one at a time.
+  locked(marker, () => {
+    const head = git(main, 'rev-parse', 'HEAD').trim(), done = existsSync(marker) ? read(marker).trim() : '';
+    let stale = !done || missingModules(main);
+    if (!stale && done !== head) {
+      try { stale = git(main, 'diff', '--name-only', '-z', done, head).split('\0').some(f => DEPS.test(f)); } catch { stale = true; }
+    }
+    if (!stale) return writeFileSync(marker, head);
+    rmSync(marker, { force: true });
+    install(cfg, main);
+    writeFileSync(marker, head);
+  }, { long: true });
 }
 
 // forja-main only ever fast-forwards to origin/main. Nothing is run in the project checkout but fetch and worktree add.

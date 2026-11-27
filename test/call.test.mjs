@@ -633,3 +633,38 @@ test('the test check reports plain pass without totals, and the totals when the 
   await check(F.cfg, 65, 'claude:sonnet', 1);
   assert.match(rd(`${F.J(65)}/build.md`), /Checks: typecheck skip; test pass \(3 pass, 0 fail, 1 skipped\); build skip/);
 });
+
+test('syncDeps holds a lock while installing, takes over one whose process is gone, and reads names with -z', () => {
+  const lockProbe = `node -e "const f=require('fs');if(!f.existsSync('{main}.installed.lock'))process.exit(3);f.appendFileSync('{project}/runs.log','x')"`;
+  const E = mkEnv({ checks: { install: lockProbe } });
+  const runs = () => (existsSync(`${E.project}/runs.log`) ? rd(`${E.project}/runs.log`).length : 0);
+  ensureMain(E.cfg);
+  assert.equal(runs(), 1);
+  assert.equal(existsSync(`${E.cfg.paths.main}.installed.lock`), false);
+  put(`${E.cfg.paths.main}.installed.lock`, String(spawnSync(process.execPath, ['-e', '0']).pid));
+  E.pushOrigin('sub/ação/yarn.lock', 'x\n');
+  const t0 = Date.now();
+  ensureMain(E.cfg);
+  assert.ok(Date.now() - t0 < 20e3);
+  assert.equal(runs(), 2);
+  assert.equal(existsSync(`${E.cfg.paths.main}.installed.lock`), false);
+});
+
+test('syncDeps does not reinstall forever for a project that has no node_modules by design', () => {
+  const E = mkEnv({ checks: { install: `node -e "require('fs').appendFileSync('{project}/runs.log','x')"` } });
+  const runs = () => (existsSync(`${E.project}/runs.log`) ? rd(`${E.project}/runs.log`).length : 0);
+  E.pushOrigin('package.json', '{"name":"x"}\n');
+  ensureMain(E.cfg);
+  ensureMain(E.cfg);
+  ensureMain(E.cfg);
+  assert.equal(runs(), 1);
+  E.pushOrigin('package.json', '{"name":"x","devDependencies":{"y":"1"}}\n');
+  E.pushOrigin('.pnp.cjs', '// pnp\n');
+  ensureMain(E.cfg);
+  ensureMain(E.cfg);
+  assert.equal(runs(), 2);
+  rmSync(`${E.cfg.paths.main}/.pnp.cjs`);
+  ensureMain(E.cfg);
+  ensureMain(E.cfg);
+  assert.equal(runs(), 4);
+});
