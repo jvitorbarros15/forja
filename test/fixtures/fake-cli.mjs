@@ -6,7 +6,8 @@ for await (const c of process.stdin) stdin += c;
 const rec = { argv, stdin, cwd: process.cwd() };
 if (process.env.FAKE_LOG) fs.appendFileSync(process.env.FAKE_LOG, `${JSON.stringify(rec)}\n`);
 if (process.env.FAKE_LIMIT) { console.error('429 rate limit'); process.exit(1); }
-const text = JSON.stringify(rec);
+if (process.env.FAKE_WRITE) { const [f, ...c] = process.env.FAKE_WRITE.split('::'); fs.writeFileSync(f, c.join('::')); }
+const text = process.env.FAKE_TEXT ?? JSON.stringify(rec);
 
 if (argv[0] === 'exec') {
   fs.writeFileSync(argv[argv.indexOf('-o') + 1], text);
