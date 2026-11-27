@@ -68,7 +68,7 @@ export async function build(cfg, n, entry, round) {
   return { ...await check(cfg, n, entry, round, a.ok ? '' : t(cfg.language, 'err.execFailed', { entry, err: a.err })), usage: a.usage };
 }
 
-async function judge(cfg, n, kind, entry, { cwd, file, verdicts, vars, images = [] }) {
+async function judge(cfg, n, kind, entry, { cwd, file, verdicts, vars, images = [], commit = false }) {
   const L = (k, v) => t(cfg.language, k, v), state = () => git(cwd, 'status', '--porcelain') + git(cwd, 'rev-parse', 'HEAD'), before = state();
   let body;
   try { body = prompt(cfg, kind, { vendor: parseEntry(entry).vendor, ...vars }); } catch (e) {
@@ -83,7 +83,7 @@ async function judge(cfg, n, kind, entry, { cwd, file, verdicts, vars, images = 
   const lines = a.text.trim().split('\n'), i = lines.findIndex(l => new RegExp(`^VERDICT: (${verdicts})\\b`).test(l.trim()));
   if (i < 0) return { status: 'failed', note: L('err.noVerdict', { entry }), usage: a.usage };
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, `${[lines[i].trim(), `Reviewer: ${entry}`, ...lines.slice(i + 1, i + 21)].join('\n')}\n`);
+  writeFileSync(file, `${[lines[i].trim(), `Reviewer: ${entry}`, ...(commit ? [`Commit: ${git(cwd, 'rev-parse', 'HEAD').trim()}`] : []), ...lines.slice(i + 1, i + 21)].join('\n')}\n`);
   return { status: 'ok', note: lines[i].trim(), usage: a.usage };
 }
 
@@ -94,11 +94,11 @@ export async function review(cfg, n, kind, entry, round) {
   const images = kind === 'ui' && existsSync(shots) ? readdirSync(shots).filter(f => /\.(png|jpe?g)$/i.test(f)).map(f => `${shots}/${f}`) : [];
   if (kind === 'ui' && !images.length) {
     mkdirSync(rd, { recursive: true });
-    writeFileSync(file, `VERDICT: PASS\nReviewer: skipped\n- ${t(cfg.language, 'note.uiReviewSkipped')}\n`);
+    writeFileSync(file, `VERDICT: PASS\nReviewer: skipped\nCommit: ${git(wt, 'rev-parse', 'HEAD').trim()}\n- ${t(cfg.language, 'note.uiReviewSkipped')}\n`);
     return { status: 'ok', note: 'VERDICT: PASS (skipped)' };
   }
   const vars = { spec, diff: diffBlock(vendor, spec, git(wt, 'diff', 'origin/main...HEAD')), images: images.length ? `# Screenshots\n${images.join('\n')}` : '' };
-  return judge(cfg, n, kind, entry, { cwd: wt, file, verdicts: 'PASS|CHANGES', vars, images });
+  return judge(cfg, n, kind, entry, { cwd: wt, file, verdicts: 'PASS|CHANGES', vars, images, commit: true });
 }
 
 // The blind check reads the repo at origin/main: the job has no worktree yet when it runs.

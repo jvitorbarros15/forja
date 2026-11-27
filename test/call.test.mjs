@@ -248,7 +248,7 @@ test('ui review without screenshots is skipped with a visible PASS', async () =>
   const E = mkEnv(FAKES);
   job(E, 26);
   assert.deepEqual(await review(E.cfg, 26, 'ui', 'codex:sol', 1), { status: 'ok', note: 'VERDICT: PASS (skipped)' });
-  assert.match(rd(`${E.J(26)}/round-1/review-ui.md`), /^VERDICT: PASS\nReviewer: skipped\n- skipped: no screenshots/);
+  assert.match(rd(`${E.J(26)}/round-1/review-ui.md`), /^VERDICT: PASS\nReviewer: skipped\nCommit: [0-9a-f]{40}\n- skipped: no screenshots/);
 });
 
 test('external review writes review file and logs limited call', async () => {
@@ -258,7 +258,8 @@ test('external review writes review file and logs limited call', async () => {
   const r = await withEnv({ FAKE_LOG: log, FAKE_TEXT: 'noise\nVERDICT: CHANGES\n- src/a.js:1: wrong value. fix it.' }, () => review(E.cfg, 31, 'code', 'codex:sol', 1));
   assert.equal(r.status, 'ok');
   assert.deepEqual(r.usage, { input: 10, output: 5, total: 15 });
-  assert.equal(rd(`${E.J(31)}/round-1/review-code.md`), 'VERDICT: CHANGES\nReviewer: codex:sol\n- src/a.js:1: wrong value. fix it.\n');
+  assert.equal(rd(`${E.J(31)}/round-1/review-code.md`), `VERDICT: CHANGES\nReviewer: codex:sol\nCommit: ${g(wt, 'rev-parse', 'HEAD').trim()}\n- src/a.js:1: wrong value. fix it.\n`);
+  assert.ok(rd(`${E.J(31)}/build.md`).includes(`Commit: ${g(wt, 'rev-parse', '--short', 'HEAD').trim()} `));
   const [c] = calls(log);
   assert.equal(c.cwd.replaceAll('\\', '/'), wt);
   assert.match(c.stdin, /Review this change against the spec/);

@@ -46,7 +46,7 @@ const job = o => ({ round: 1, fails: 0, reviews: {}, running: [], events: [], si
 const R = { code: { verdict: 'PASS' } };
 const commands = (E, list) => put(E.P.commands, list.map((c, i) => ({ id: `c${i}`, status: 'pending', note: '', ...c })));
 // A build plus a code review written after it: what approve() and merge need.
-const reviewed = (E, n, extra = '') => { put(`${E.J(n)}/build.md`, `BUILD: OK\nRound: 1\n${extra}`); put(`${E.J(n)}/round-1/review-code.md`, 'VERDICT: PASS\n'); };
+const reviewed = (E, n, extra = '') => { put(`${E.J(n)}/build.md`, `BUILD: OK\nRound: 1\nCommit: abc1234 Add x\n${extra}`); put(`${E.J(n)}/round-1/review-code.md`, 'VERDICT: PASS\nCommit: abc1234def\n'); };
 const rmRuns = E => { for (const k of ['deploy', 'deploy-test']) rmSync(`${E.F}/run-${k}.json`, { force: true }); };
 
 const E = mkEnv(), { T, J, F } = E, rv = (n, extra) => reviewed(E, n, extra);
@@ -185,7 +185,7 @@ test('an approve whose PR step failed waits for the retry time instead of being 
 
 test('decorated markers count; the approver needs a bare APPROVE above Tier', () => {
   const end = (agent, text) => T.agentEnd(job({ issue: 13 }), { agent, out: 'x.md' }, true, text).write;
-  assert.equal(end('review-security', 'Done.\n\n**VERDICT: PASS**\n- ok'), 'VERDICT: PASS\n- ok\n');
+  assert.equal(end('review-security', 'Done.\n\n**VERDICT: PASS**\n- ok'), 'VERDICT: PASS\nCommit: -\n- ok\n');
   assert.equal(end('builder', 'All good, tests pass.'), 'DONE\nAll good, tests pass.\n');
   assert.equal(end('builder', '**DONE**\nchanged a.ts'), 'DONE\nchanged a.ts\n');
   assert.equal(end('approver', 'APPROVE only holds if CI passes.\nESCALATE\nTier: B\nReason: x'), 'ESCALATE\nTier: B\nReason: x\n');
@@ -430,11 +430,15 @@ test('approve is refused while reviews are pending', () => {
 });
 
 test('nothing merges or gets approved unless the build that would merge was reviewed', () => {
-  put(`${J(44)}/build.md`, 'BUILD: OK\nRound: 2\n');
+  put(`${J(44)}/build.md`, 'BUILD: OK\nRound: 2\nCommit: abc1234 Add x\n');
   const j = job({ issue: 44, round: 2, stage: 'pr', pr: 9, prState: 'open', ci: 'pass', tier: 'B', reviews: R });
   assert.equal(T.stepFor(j, {}).step, 'fail');
   assert.ok(T.unreviewed(j));
   put(`${J(44)}/round-2/review-code.md`, 'VERDICT: PASS\n');
+  assert.ok(T.unreviewed(j));
+  put(`${J(44)}/round-2/review-code.md`, 'VERDICT: PASS\nCommit: 1111111\n');
+  assert.ok(T.unreviewed(j));
+  put(`${J(44)}/round-2/review-code.md`, 'VERDICT: PASS\nCommit: abc1234def\n');
   assert.equal(T.stepFor(j, {}).step, 'merge');
   assert.equal(T.unreviewed(j), '');
 });
@@ -753,4 +757,13 @@ test('a PR command written before the advisor launched is still seen, and is spe
   assert.deepEqual(run(), []);
   board({ stageSince: later(-1000) });
   assert.deepEqual(run(), []);
+});
+
+test('a reviewer file carries the commit the runner saw at launch, whatever the agent wrote', () => {
+  const j = job({ issue: 27, stage: 'review', running: ['code'] }), a = { agent: 'review-code', out: `${J(27)}/round-1/review-code.md`, commit: 'f'.repeat(40) };
+  assert.equal(T.agentEnd(j, a, true, 'VERDICT: PASS\n- fine').write, `VERDICT: PASS\nCommit: ${'f'.repeat(40)}\n- fine\n`);
+  assert.equal(T.agentEnd(j, a, true, 'VERDICT: CHANGES\nCommit: 1234567\n- a.ts:1: bug. fix.').write, `VERDICT: CHANGES\nCommit: ${'f'.repeat(40)}\n- a.ts:1: bug. fix.\n`);
+  assert.equal(T.agentEnd(j, a, true, 'VERDICT: PASS').write, `VERDICT: PASS\nCommit: ${'f'.repeat(40)}\n`);
+  assert.equal(T.agentEnd(j, { ...a, commit: undefined }, true, 'VERDICT: PASS').write, 'VERDICT: PASS\nCommit: -\n');
+  assert.equal(T.agentEnd(job({ issue: 27, stage: 'approve', running: ['approver'] }), { agent: 'approver', out: `${J(27)}/decision.md` }, true, 'APPROVE\nTier: B').write, 'APPROVE\nTier: B\n');
 });

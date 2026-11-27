@@ -200,6 +200,8 @@ test('startAgent resolves cwd at launch, writes reviewer diff and syncs main bef
   g(E.WT(11), 'commit', '-qm', 'Add src');
   startAgent(ctx, 11, a('review-code', 11));
   assert.equal(agentFile(11, 'code').cwd, E.WT(11));
+  assert.equal(agentFile(11, 'code').commit, g(E.WT(11), 'rev-parse', 'HEAD').trim());
+  assert.equal('commit' in agentFile(11, 'approver'), false);
   assert.match(rd(`${E.J(11)}/round-1/diff.patch`), /\+\+\+ b\/src\.txt/);
   const w = readJson(E.P.board).jobs.find(x => x.issue === 11).workers.find(x => x.role === 'review-code');
   assert.deepEqual([w.status, w.vendor, w.round, w.pid], ['running', 'claude', 1, process.pid]);

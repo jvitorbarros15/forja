@@ -97,13 +97,14 @@ export function startAgent(ctx, issue, a) {
     // The spec reads the code in forja-main, so it must match origin; only a fast-forward, never a merge or reset.
     try { ensureMain(cfg); } catch (e) { if (!existsSync(cfg.paths.main)) throw e; log(`forja-main did not advance: ${first(e)}`); }
   }
+  let commit;
   if (role.reviewer) {
     mkdirSync(`${J}/round-${a.round}`, { recursive: true });
-    if (existsSync(WT)) writeFileSync(`${J}/round-${a.round}/diff.patch`, git(WT, 'diff', 'origin/main...HEAD'));
+    if (existsSync(WT)) { writeFileSync(`${J}/round-${a.round}/diff.patch`, git(WT, 'diff', 'origin/main...HEAD')); commit = git(WT, 'rev-parse', 'HEAD').trim(); }
   }
   // The worktree of a builder is made by the step's setup command, after the tick chose the cwd: resolved here.
   const cwd = a.agent !== 'spec' && existsSync(WT) ? WT : cfg.paths.main;
-  writeJson(file, { ...a, cwd, id, startedAt });
+  writeJson(file, { ...a, cwd, id, startedAt, ...(commit ? { commit } : {}) });
   const c = ctx.launch(ctx, [SELF, '--agent', file, '--project', cfg.paths.project]);
   T.upsertWorker(issue, { id, model: a.model, vendor: 'claude', role: a.agent, round: a.round, status: 'running', startedAt, endedAt: null, durationMs: null, tokens: null, pid: c.pid, cpid: null });
   log(`agent ${a.agent} (${a.model}) #${issue} pid ${c.pid}`);

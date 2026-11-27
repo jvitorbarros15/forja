@@ -166,6 +166,8 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
     const from = m.clean ? 0 : m.index + txt.slice(m.index).search(/\w/);
     let body = m.clean ? `DONE\n${txt}` : txt.slice(from).replace(/^(.*?)[\s*_`]*(\r?\n|$)/, '$1$2');
     if (/(```|~~~)[^\n]*\n\W*$/.test(txt.slice(0, from))) body = body.replace(/\n(```|~~~)\s*$/, '');
+    // The commit a review names is the one the runner saw when it launched the reviewer, never the agent's claim.
+    if (role.reviewer) body = body.replace(/^\s*Commit:.*(\r?\n|$)/gm, '').replace(/^(.*?)(\r?\n|$)/, `$1\nCommit: ${a.commit ?? '-'}$2`);
     return { write: `${body.trimEnd()}\n`, set: { running, agentRetry: retried.filter(r => r !== slot), ...(job.limitWaits ? { limitWaits: 0 } : {}) } };
   }
 
@@ -235,11 +237,13 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
   const claudeHeld = (q, step) => !!q.claude?.limitedUntil && !!step.do?.some(d => d.agent);
   const busyJob = job => job.running?.length > 0 || (existsSync(J(job.issue)) && readdirSync(J(job.issue)).some(f => /^run-.+\.json$/.test(f) && runningFile(`${J(job.issue)}/${f}`)));
 
-  // Nothing merges unless every review ran on the build that would merge: review files of that build's round, written after it.
+  // Nothing merges unless every review ran on the build that would merge: each review file of that build's round names
+  // the commit it reviewed, and it must be the one build.md recorded.
+  const shaOf = text => (s => (/^[0-9a-f]{7,40}$/.test(s) ? s : ''))(field(text, 'Commit')?.split(' ')[0] ?? '');
   function unreviewed(job) {
-    const dir = J(job.issue), b = read(`${dir}/build.md`), want = Object.keys(job.reviews ?? {}), rd = `${dir}/round-${field(b, 'Round')}`;
+    const dir = J(job.issue), b = read(`${dir}/build.md`), want = Object.keys(job.reviews ?? {}), rd = `${dir}/round-${field(b, 'Round')}`, sha = shaOf(b);
     if (!b.startsWith('BUILD: OK') || !want.length) return L('need.noReviewedBuild');
-    const miss = want.filter(w => mtime(`${rd}/review-${w}.md`) < mtime(`${dir}/build.md`));
+    const miss = want.filter(w => { const c = shaOf(read(`${rd}/review-${w}.md`)); return !sha || !c || !(c.startsWith(sha) || sha.startsWith(c)); });
     return miss.length ? L('need.buildNotReviewed', { kinds: miss.join(', ') }) : '';
   }
 
