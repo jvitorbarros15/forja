@@ -212,7 +212,7 @@ test('UI: yes only when ui.paths match; serve gets PORT, verify gets BASE_URL, a
   const b = rd(`${E.J(22)}/build.md`);
   assert.match(b, /^BUILD: OK[\s\S]*UI: yes/);
   assert.match(b, /ui verify pass, screenshots skipped \(Playwright is not installed\)/);
-  assert.equal(rd(out), `http://127.0.0.1:${4400 + 22}`);
+  assert.match(rd(out), /^http:\/\/127\.0\.0\.1:\d+$/);
   const wf = job(E, 23);
   put(`${wf}/web/index.html`, '<p>broken</p>\n');
   await withEnv({ VERIFY_OUT: out, VERIFY_FAIL: '1' }, () => check(E.cfg, 23, 'claude:sonnet', 1));
@@ -600,4 +600,25 @@ test('the exact executor refuses paths outside the worktree, protected paths and
   put(`${E.J(60)}/spec.md`, SPEC(60, edit('src/../README.md', 'a', 'b')));
   assert.equal((await build(E.cfg, 60, 'local:exact', 1)).status, 'ok');
   assert.equal(rd(`${wt}/README.md`).replaceAll('\r\n', '\n'), 'b\n');
+});
+
+test('UI: serve gets a free port even when the old fixed one is taken, and a serve that dies after answering is not up', async () => {
+  const out = `${mkdtempSync(`${tmpdir()}/forja-ui-`).replaceAll('\\', '/')}/verify.out`;
+  const taken = createServer((q, s) => s.end('someone else')), E = mkEnv({ ui: { paths: ['web/**'], serve: 'node serve.js', verify: 'node verify.js' } });
+  await new Promise(r => taken.listen(4400 + 62, '127.0.0.1', r)).catch(() => {});
+  try {
+    const wt = job(E, 62);
+    put(`${wt}/web/index.html`, '<p>changed</p>\n');
+    await withEnv({ VERIFY_OUT: out }, () => check(E.cfg, 62, 'claude:sonnet', 1));
+    assert.match(rd(`${E.J(62)}/build.md`), /^BUILD: OK[\s\S]*ui verify pass/);
+    assert.notEqual(rd(out), `http://127.0.0.1:${4400 + 62}`);
+  } finally { taken.close(); }
+  const dies = mkEnv({ ui: { paths: ['web/**'], serve: 'node serve.js', verify: 'node verify.js' } }), wd = job(dies, 63);
+  put(`${wd}/web/index.html`, '<p>changed</p>\n');
+  put(`${wd}/serve.js`, "const s = require('http').createServer((q, r) => r.end('ok', () => process.exit(0))).listen(process.env.PORT);\n");
+  await withEnv({ VERIFY_OUT: out }, () => check(dies.cfg, 63, 'claude:sonnet', 1));
+  const b = rd(`${dies.J(63)}/build.md`);
+  assert.match(b, /^BUILD: FAILED/);
+  assert.match(b, /ui serve failed/);
+  assert.match(b, /ui\.serve did not answer on port \d+/);
 });

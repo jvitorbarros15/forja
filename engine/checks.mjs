@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { createServer } from 'node:net';
 import { pathToFileURL } from 'node:url';
 import { PROTECTED, globMatch, tierOf } from './config.mjs';
 import { t } from './i18n.mjs';
@@ -11,6 +12,8 @@ import { tail } from './vendors/proc.mjs';
 import { dirty, expand, linked, sh } from './worktree.mjs';
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
+// A port nothing else holds right now: a fixed one can belong to another app, whose answer would pass for ui.serve.
+const freePort = () => new Promise((ok, bad) => { const s = createServer(); s.once('error', bad); s.listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => ok(port)); }); });
 
 async function loadPlaywright(wt) {
   const loads = [() => import(pathToFileURL(createRequire(`${wt}/`).resolve('playwright')).href), () => import('playwright')];
@@ -42,7 +45,7 @@ async function screenshots(cfg, n, round, url, pages, chromium) {
 async function verifyUi(cfg, n, round, spec) {
   const wt = paths(cfg).wt(n), L = (k, v) => t(cfg.language, k, v), { ui } = cfg, chromium = await deps.playwright(wt);
   if (!ui.verify && !chromium) return { summary: L('check.uiSkipped'), note: '' };
-  const port = 4400 + n % 500, url = `http://127.0.0.1:${port}`;
+  const port = await freePort(), url = `http://127.0.0.1:${port}`;
   const srv = spawn(expand(cfg, ui.serve), { cwd: wt, shell: true, detached: !IS_WIN, env: { ...process.env, PORT: String(port) }, stdio: 'ignore', windowsHide: true });
   srv.on('error', () => {});
   try {
@@ -50,6 +53,8 @@ async function verifyUi(cfg, n, round, spec) {
     for (let i = 0; i < 60 && !up && srv.exitCode === null; i++) {
       try { await fetch(url, { signal: AbortSignal.timeout(2000) }); up = true; } catch { await wait(1000); }
     }
+    // The answer must come from this serve: a process that exits right after answering, or never started, is not up.
+    if (up) { await wait(250); up = srv.exitCode === null && srv.signalCode === null; }
     if (!up) return { summary: 'serve failed', note: L('check.uiNoServer', { port }) };
     let summary = 'verify skipped';
     if (ui.verify) {
