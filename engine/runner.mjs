@@ -24,7 +24,7 @@ const stamp = (...a) => [new Date().toISOString().slice(11, 19), ...a].join(' ')
 const asJson = o => JSON.stringify(o);
 const argvOf = cmd => [...cmd.matchAll(/"([^"]*)"|(\S+)/g)].map(m => m[1] ?? m[2]);
 
-function loadCfg(project) {
+export function loadCfg(project) {
   const cfg = loadConfig(project);
   return existsSync(`${cfg.paths.main}/.forja/config.json`) ? loadConfig(project, { mainDir: cfg.paths.main }) : cfg;
 }
@@ -48,7 +48,7 @@ export function makeCtx(cfg, o = {}) {
 // Background work must outlive a runner restart, so it is detached. On Windows node kills every other child with its parent,
 // and a detached process has no console, so each program it starts would open a visible one: the detached process is only
 // a launcher that starts the real script with a hidden console, which everything below inherits, and waits for it.
-function launch(ctx, argv) {
+export function launch(ctx, argv) {
   const cwd = ctx.cfg.paths.project;
   let c;
   if (IS_WIN) {
@@ -296,7 +296,7 @@ export function reapAgents(ctx) {
     T.setJob(j0.issue, j => {
       const { gone, old, held, stale } = scanAgents(cfg, j), closed = [...gone, ...old], endedAt = new Date().toISOString(), slot = w => slotOf(cfg, w);
       if (!closed.length && !stale.length) return {};
-      for (const w of old) killIf(w.pid, w.startedAt, 'node');
+      for (const w of old) { killIf(w.cpid, w.startedAt, 'claude', 'node'); killIf(w.pid, w.startedAt, 'node'); }
       for (const w of gone) killIf(w.cpid ?? w.pid, w.startedAt, 'claude', 'node');
       const patch = { workers: (j.workers ?? []).map(w => (closed.includes(w) ? { ...w, status: 'failed', endedAt } : w)), ...(stale.length ? { running: (j.running ?? []).filter(r => held.has(r)) } : {}) };
       // A current agent that died without reporting spends a retry like one that answered nothing: a crash at launch cannot loop.
@@ -354,6 +354,8 @@ export async function run(argv, o = {}) {
   const args = [...argv], flag = k => args.includes(k), val = (k, d) => (flag(k) ? args[args.indexOf(k) + 1] : d);
   const project = val('--project', process.cwd()), agent = val('--agent', null), dry = flag('--dry-run'), once = flag('--once') || dry;
   const every = Number(val('--every', 15)), only = val('--issue', null), logFile = `${stateDir(project)}/logs/agents.log`;
+  const badArg = !(every > 0 && Number.isFinite(every)) ? '--every must be a positive number of seconds' : only !== null && !/^d+$/.test(only) ? '--issue must be an issue number' : null;
+  if (badArg) { (o.err ?? console.error)(badArg); return 1; }
   const base = { gh: o.gh, notify: o.notify, launch: o.launch, dry, once, only: only === null ? null : Number(only), every, mem: {}, pending: new Set() };
 
   if (agent) {

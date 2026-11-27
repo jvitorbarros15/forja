@@ -90,6 +90,32 @@ test('scanAgents marks dead worker gone and frees slot', () => {
   assert.deepEqual(b.agentRetry, ['builder']);
 });
 
+test('reapAgents kills an old-round agent and its claude child, only when the start time verifies', async () => {
+  const E = mkEnv(), ctx = E.ctx(), spawnFake = () => spawn(process.execPath, [FAKE], { stdio: ['pipe', 'ignore', 'ignore'] });
+  const closed = c => new Promise(r => c.on('close', r)), alive = c => c.exitCode === null && c.signalCode === null;
+  const [a, ac, b, bc] = [spawnFake(), spawnFake(), spawnFake(), spawnFake()];
+  try {
+    const w = (id, p, c, startedAt) => ({ id, role: 'approver', vendor: 'claude', status: 'running', round: 1, pid: p.pid, cpid: c.pid, startedAt });
+    job(E, 8, { stage: 'approve', round: 2, running: ['approver'], workers: [w('approver-1', a, ac, now())] });
+    reapAgents(ctx);
+    await Promise.race([Promise.all([closed(a), closed(ac)]), new Promise((_, no) => setTimeout(() => no(new Error('not killed')), 5000))]);
+    assert.equal(readJson(E.P.board).jobs[0].workers[0].status, 'failed');
+
+    job(E, 9, { stage: 'approve', round: 2, running: ['approver'], workers: [w('approver-1', b, bc, '2000-01-01T00:00:00.000Z')] });
+    reapAgents(ctx);
+    assert.ok(alive(b) && alive(bc));
+  } finally { for (const c of [a, ac, b, bc]) c.kill(); }
+});
+
+test('bad --every or --issue exits 1 instead of spinning', async () => {
+  const E = mkEnv(), errs = [];
+  for (const bad of [['--every'], ['--every', 'x'], ['--every', '0'], ['--issue', 'x'], ['--issue']]) {
+    assert.equal(await run(['--project', E.project, '--once', ...bad], { ...E.opts, err: m => errs.push(m) }), 1, bad.join(' '));
+  }
+  assert.match(errs[0], /--every/);
+  assert.match(errs.at(-1), /--issue/);
+});
+
 test('execStep write and run steps', () => {
   const E = mkEnv(), ctx = E.ctx();
   const r = execStep(ctx, { issue: 3, step: 'open-pr', after: true, set: { stage: 'pr' }, event: 'PR opened', do: [{ write: `${E.J(3)}/round-1/owner.md`, text: 'fix it' }, { run: 'node -p 7', sets: 'pr' }] });
