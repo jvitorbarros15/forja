@@ -94,7 +94,7 @@ export async function check(cfg, n, exec, round, failed = '') {
     if (notes || !cfg.checks[name]) continue;
     const r = sh(wt, expand(cfg, cfg.checks[name])), s = `${r.stdout}${r.stderr}`;
     const total = k => s.match(new RegExp(`(?:#|ℹ) ${k} (\\d+)`))?.[1];
-    out[name] = `${r.status ? 'fail' : 'pass'}${name === 'test' ? ` (${total('pass') === undefined ? 'the runner printed no totals' : `${total('pass')} pass, ${total('fail') ?? 0} fail, ${total('skipped') ?? 0} skipped`})` : ''}`;
+    out[name] = `${r.status ? 'fail' : 'pass'}${name === 'test' && total('pass') !== undefined ? ` (${total('pass')} pass, ${total('fail') ?? 0} fail, ${total('skipped') ?? 0} skipped)` : ''}`;
     if (r.status) notes = failure(L, name, r);
   }
   if (!notes && ui) {

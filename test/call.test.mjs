@@ -622,3 +622,14 @@ test('UI: serve gets a free port even when the old fixed one is taken, and a ser
   assert.match(b, /ui serve failed/);
   assert.match(b, /ui\.serve did not answer on port \d+/);
 });
+
+test('the test check reports plain pass without totals, and the totals when the runner prints them', async () => {
+  const E = mkEnv({ checks: { test: 'node -e "0"' } }), wt = job(E, 64);
+  put(`${wt}/src/a.js`, 'export const a = 2;\n');
+  await check(E.cfg, 64, 'claude:sonnet', 1);
+  assert.match(rd(`${E.J(64)}/build.md`), /Checks: typecheck skip; test pass; build skip/);
+  const F = mkEnv({ checks: { test: 'node -e "console.log(\'# pass 3\'); console.log(\'# fail 0\'); console.log(\'# skipped 1\')"' } }), wf = job(F, 65);
+  put(`${wf}/src/a.js`, 'export const a = 2;\n');
+  await check(F.cfg, 65, 'claude:sonnet', 1);
+  assert.match(rd(`${F.J(65)}/build.md`), /Checks: typecheck skip; test pass \(3 pass, 0 fail, 1 skipped\); build skip/);
+});
