@@ -256,6 +256,9 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
     return miss.length ? L('need.buildNotReviewed', { kinds: miss.join(', ') }) : '';
   }
 
+  // The merge is pinned to the build that was reviewed: a head GitHub has that is not that commit was never reviewed.
+  const headReviewed = job => (s => !!s && String(job.prHead ?? '').startsWith(s))(shaOf(read(`${J(job.issue)}/build.md`)));
+
   function approve(job) {
     const dir = J(job.issue), pending = Object.entries(job.reviews ?? {}).filter(([, r]) => r.verdict === 'pending').map(([w]) => w);
     if (pending.length) return refuse(L('refuse.reviewsPending', { kinds: pending.join(', ') }));
@@ -422,7 +425,10 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
           return s;
         }
         if (job.ci !== 'pass') return wait('ci');
-        if (job.approved || job.prCmd?.cmd === 'approve' || mergesAlone(job)) return unreviewed(job) ? fail(job, L('need.mergeBlocked', { why: unreviewed(job) }), L('action.mergeBlocked')) : merge(job);
+        if (job.approved || job.prCmd?.cmd === 'approve' || mergesAlone(job)) {
+          if (unreviewed(job)) return fail(job, L('need.mergeBlocked', { why: unreviewed(job) }), L('action.mergeBlocked'));
+          return headReviewed(job) ? merge(job) : ask(job, L('need.headMoved', { pr: job.pr }), L('action.headMoved'));
+        }
         const prot = protectedOf(n);
         return { ...ask(job, L(prot ? 'need.readyProtected' : 'need.readyTier', { pr: job.pr, tier: job.tier }), L('action.readyTier')), do: [{ notify: L('notify.levelC', { pr: job.pr, tier: job.tier, url: `https://github.com/${R}/pull/${job.pr}` }) }] };
       }

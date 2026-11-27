@@ -42,7 +42,8 @@ function mkEnv(json = MULTI, gh) {
   const T = createTick(cfg, { gh: gh ?? ((...a) => { calls.push(a); return ''; }) });
   return { cfg, T, P, J: P.jobs, WT: P.wt, F: cfg.paths.state, project, calls };
 }
-const job = o => ({ round: 1, fails: 0, reviews: {}, running: [], events: [], since: past, tier: 'B', executor: 'small', entry: 'claude:haiku', ...o });
+const HEAD = 'abc1234'.padEnd(40, '0');
+const job = o => ({ round: 1, fails: 0, reviews: {}, running: [], events: [], since: past, tier: 'B', executor: 'small', entry: 'claude:haiku', prHead: HEAD, ...o });
 const R = { code: { verdict: 'PASS' } };
 const sh = d => (d.bg ?? d.run).join(' ');
 const commands = (E, list) => put(E.P.commands, list.map((c, i) => ({ id: `c${i}`, status: 'pending', note: '', ...c })));
@@ -201,9 +202,9 @@ test('a failed card whose PR the owner merged becomes merged; the merge is pinne
   assert.equal(T.stepFor(job({ issue: 16, stage: 'failed', pr: 9, prState: 'merged' }), {}).set.stage, 'merged');
   assert.equal(T.stepFor(job({ issue: 16, stage: 'failed', pr: 9, prState: 'open' }), {}), null);
   rv(17);
-  const sha = 'a'.repeat(40), s = T.stepFor(job({ issue: 17, reviews: R, stage: 'pr', pr: 9, prState: 'open', ci: 'pass', tier: 'A', prHead: sha }), {});
+  const s = T.stepFor(job({ issue: 17, reviews: R, stage: 'pr', pr: 9, prState: 'open', ci: 'pass', tier: 'A' }), {});
   assert.equal(s.step, 'merge');
-  assert.match(sh(s.do[0]), new RegExp(`--match-head-commit ${sha}$`));
+  assert.match(sh(s.do[0]), new RegExp(`--match-head-commit ${HEAD}$`));
 });
 
 test('the doc recomputes the buttons from the current state', () => {
@@ -428,6 +429,23 @@ test('approve is refused while reviews are pending', () => {
   assert.equal(s.step, 'refuse');
   assert.equal(s.note, t('en', 'refuse.reviewsPending', { kinds: 'code' }));
   commands(E, []);
+});
+
+test('nothing merges unless the PR head is the reviewed commit; the owner is asked instead', () => {
+  rv(120, 'Protected: yes\n');
+  const pr = o => job({ issue: 120, stage: 'pr', pr: 9, prState: 'open', ci: 'pass', tier: 'A', reviews: R, ...o });
+  const moved = 'f'.repeat(40);
+  for (const extra of [{ approved: true }, { prCmd: { cmd: 'approve', note: '' } }]) {
+    const s = T.stepFor(pr({ ...extra, prHead: moved }), {});
+    assert.equal(s.step, 'escalate');
+    assert.equal(s.set.stage, 'needs-you');
+    assert.equal(s.set.note, t('en', 'need.headMoved', { pr: 9 }));
+    assert.equal(T.stepFor(pr(extra), {}).step, 'merge');
+  }
+  rv(121);
+  assert.equal(T.stepFor(pr({ issue: 121, prHead: moved }), {}).step, 'escalate');
+  assert.equal(T.stepFor(pr({ issue: 121, prHead: undefined }), {}).step, 'escalate');
+  assert.equal(T.stepFor(pr({ issue: 121, prHead: HEAD.slice(0, 20) }), {}).step, 'merge');
 });
 
 test('nothing merges or gets approved unless the build that would merge was reviewed', () => {
@@ -803,7 +821,7 @@ test('from round 2 a claude reviewer is pointed at the previous findings, and on
 });
 
 test('the merge uses pr.mergeMethod (squash by default), keeps the head pin and deletes the branch', () => {
-  const sha = 'b'.repeat(40), pr = { stage: 'pr', pr: 9, prState: 'open', ci: 'pass', tier: 'A', prHead: sha, reviews: R };
+  const sha = HEAD, pr = { stage: 'pr', pr: 9, prState: 'open', ci: 'pass', tier: 'A', prHead: sha, reviews: R };
   for (const [config, flag] of [[CLAUDE_ONLY, '--squash'], [{ ...CLAUDE_ONLY, pr: { mergeMethod: 'rebase' } }, '--rebase'], [{ ...CLAUDE_ONLY, pr: { mergeMethod: 'merge' } }, '--merge']]) {
     const C = mkEnv(config);
     put(`${C.J(19)}/build.md`, 'BUILD: OK\nRound: 1\nCommit: abc1234 Add x\n');
