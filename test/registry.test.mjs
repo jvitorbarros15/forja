@@ -174,3 +174,68 @@ test('templates keep the output contracts', () => {
   assert.deepEqual(r['review-security'].skills, ['security-audit']);
   assert.deepEqual(r.spec.skills, []);
 });
+
+const mkRole = (cfg, text) => {
+  write(`${cfg.paths.main}/.forja/agents/spec.md`, text);
+  return roles(cfg).spec;
+};
+
+test('renderAgent accepts template without frontmatter', () => {
+  const cfg = mkCfg();
+  const role = mkRole(cfg, 'just a body for {{language}}');
+  assert.equal(renderAgent(cfg, role).body, 'just a body for en');
+  assert.deepEqual(role.skills, []);
+});
+
+test('renderAgent strips BOM', () => {
+  const cfg = mkCfg();
+  assert.equal(renderAgent(cfg, mkRole(cfg, '\uFEFF---\nname: s\n---\nbody text')).body, 'body text');
+  assert.equal(renderAgent(cfg, mkRole(cfg, '\uFEFFplain body')).body, 'plain body');
+});
+
+test('renderAgent throws on empty body', () => {
+  const cfg = mkCfg();
+  assert.throws(() => renderAgent(cfg, mkRole(cfg, '---\nname: s\n---\n  \n')), /no agent body for spec/);
+  assert.throws(() => renderAgent(cfg, mkRole(cfg, '')), /no agent body for spec/);
+});
+
+test('rendered checks match what each role may run', () => {
+  const cfg = realPlugin(mkCfg());
+  Object.assign(cfg.checks, { install: 'make install', typecheck: 'make types', test: 'make test', build: 'make build', deploy: 'make deploy', deployTest: 'make deploy-test' });
+  cfg.reviewers.data = { agent: 'data.md' };
+  write(`${cfg.paths.main}/data.md`, 'data reviewer\n{{checks}}');
+  const home = tmp();
+  for (const k of ['ponytail-review', 'security-audit']) write(`${home}/.claude/skills/${k}/SKILL.md`, 'skill');
+  const r = roles(cfg);
+  const body = (n) => renderAgent(cfg, r[n], home).body;
+  for (const n of Object.keys(r)) for (const c of ['make install', 'make deploy', 'make deploy-test']) assert.ok(!body(n).includes(c), `${n} ${c}`);
+  assert.ok(body('builder').includes('make types') && body('builder').includes('make test') && !body('builder').includes('make build'));
+  assert.ok(body('spec').includes('make types') && body('spec').includes('make test') && body('spec').includes('make build'));
+  for (const n of ['approver', 'advisor', 'review-code', 'review-ponytail', 'review-security']) {
+    assert.ok(body(n).includes('make test') && !body(n).includes('make types') && !body(n).includes('make build'), n);
+  }
+  assert.ok(!body('review-ui').includes('make test'));
+  assert.ok(body('review-ui').includes('{{') === false);
+  assert.ok(!body('review-data').includes('make test'));
+});
+
+test('every role but the builder denies Edit and Write', () => {
+  const cfg = mkCfg();
+  cfg.reviewers.data = { agent: 'x.md' };
+  const r = roles(cfg);
+  for (const n of Object.keys(r)) {
+    if (n === 'builder') { assert.ok(!r[n].deny.includes('Edit(./**)')); continue; }
+    assert.ok(r[n].deny.includes('Edit(./**)') && r[n].deny.includes('Write(./**)'), n);
+  }
+});
+
+test('empty denyRead omits the never-read line', () => {
+  const cfg = realPlugin(mkCfg());
+  cfg.privacy.denyRead = [];
+  assert.ok(!renderAgent(cfg, roles(cfg).spec).body.includes('Never read files matching'));
+});
+
+test('templates leave commit rules to commitGuidance', () => {
+  const cfg = realPlugin(mkCfg());
+  for (const r of Object.values(roles(cfg))) assert.doesNotMatch(fs.readFileSync(r.template, 'utf8'), /Co-Authored/i, r.name);
+});
