@@ -53,12 +53,21 @@ function syncDeps(cfg) {
   }, { long: true });
 }
 
+// forja-main belongs to Forja: what an agent, a vendor CLI or an install left in it is discarded, so the config and the agent
+// overrides read from it are the merged ones. Ignored files and node_modules stay.
+export function cleanMain(main) {
+  if (!existsSync(`${main}/.git`)) return;
+  if (!git(main, 'status', '--porcelain').split('\n').some(l => l.trim() && !/^\?\? node_modules\/?$/.test(l))) return;
+  git(main, 'reset', '-q', '--hard', 'HEAD');
+  git(main, 'clean', '-qfd', '-e', 'node_modules', '-e', '.pnp.*');
+}
+
 // forja-main only ever fast-forwards to the default branch. Nothing is run in the project checkout but fetch and worktree add.
 // `install: false` skips the dependency install, which can take minutes: the runner uses it before a spec so one job's install never holds up the others.
 export function ensureMain(cfg, { install = true } = {}) {
   const { project, main } = cfg.paths;
   git(project, 'fetch', '-q', 'origin', cfg.defaultBranch);
-  if (existsSync(main)) git(main, 'merge', '-q', '--ff-only', `origin/${cfg.defaultBranch}`);
+  if (existsSync(main)) { cleanMain(main); git(main, 'merge', '-q', '--ff-only', `origin/${cfg.defaultBranch}`); }
   else git(project, 'worktree', 'add', '-q', '--detach', main, `origin/${cfg.defaultBranch}`);
   if (install) syncDeps(cfg);
 }

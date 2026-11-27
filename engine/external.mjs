@@ -7,7 +7,7 @@ import { logCall, parseEntry, quota } from './models.mjs';
 import { bestEffort, field, findingFiles, git, paths, read } from './state.mjs';
 import { ask, diffBlock, prompt } from './vendors/index.mjs';
 import { tail } from './vendors/proc.mjs';
-import { ensureMain, setupJob } from './worktree.mjs';
+import { cleanMain, ensureMain, setupJob } from './worktree.mjs';
 
 const count = (hay, needle) => hay.split(needle).length - 1;
 const edits = spec => [...spec.matchAll(/^### (\S+)\nBEFORE:\n```[^\n]*\n([\s\S]*?)\n```\nAFTER:\n```[^\n]*\n([\s\S]*?)\n```/gm)].map(m => ({ file: m[1], before: m[2], after: m[3] }));
@@ -122,5 +122,8 @@ export async function review(cfg, n, kind, entry, round) {
 export async function goldfish(cfg, n, entry) {
   ensureMain(cfg);
   const P = paths(cfg);
-  return judge(cfg, n, 'goldfish', entry, { cwd: P.main, file: `${P.jobs(n)}/spec-review.md`, verdicts: 'OK|GAPS', vars: { spec: read(`${P.jobs(n)}/spec.md`) } });
+  try { return await judge(cfg, n, 'goldfish', entry, { cwd: P.main, file: `${P.jobs(n)}/spec-review.md`, verdicts: 'OK|GAPS', vars: { spec: read(`${P.jobs(n)}/spec.md`) } }); } finally {
+    // A CLI that edited forja-main fails the check; what it wrote must not stay behind.
+    try { cleanMain(P.main); } catch {}
+  }
 }

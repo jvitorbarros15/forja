@@ -6,7 +6,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, openSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ConfigError, loadProjectConfig } from './config.mjs';
+import { ConfigError, loadProjectConfig, mainDirOf } from './config.mjs';
 import { t } from './i18n.mjs';
 import { logCall } from './models.mjs';
 import { IS_WIN, alive, killTree, notify as platformNotify, spawnDetached } from './platform.mjs';
@@ -14,7 +14,7 @@ import { roles } from './registry.mjs';
 import { bestEffort, gh as realGh, git, locked, paths, read, readJson, writeJson } from './state.mjs';
 import { createTick } from './tick.mjs';
 import { runAgent } from './vendors/claude.mjs';
-import { ensureMain } from './worktree.mjs';
+import { cleanMain, ensureMain } from './worktree.mjs';
 
 const MIN = 60e3, SELF = fileURLToPath(import.meta.url), DEPLOYS = ['deploy', 'deploy-test'];
 const fwd = p => p.replace(/\\/g, '/');
@@ -352,7 +352,11 @@ export async function cycle(ctx) {
 // the dashboard reads for what each job waits on and the vendors' quota.
 export async function runCycle(project, o) {
   let error = null, t = null;
-  try { t = await cycle(makeCtx(loadProjectConfig(project), o)); } catch (e) {
+  try {
+    // A deploy builds inside forja-main, so it is left alone while one runs.
+    if (!DEPLOYS.some(k => (r => r?.status === 'running' && alive(r.pid, r.startedAt, 'node'))(readJson(`${stateDir(project)}/run-${k}.json`, null)))) try { cleanMain(mainDirOf(project)); } catch {}
+    t = await cycle(makeCtx(loadProjectConfig(project), o));
+  } catch (e) {
     error = e instanceof ConfigError ? e.errors.join('; ').slice(0, 400) : first(e);
     (o.log ?? ((...a) => console.log(stamp(...a))))('cycle failed:', error);
   }

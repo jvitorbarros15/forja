@@ -10,6 +10,7 @@ import { loadConfig } from '../engine/config.mjs';
 import { quota } from '../engine/models.mjs';
 import { argError, cycle, feedQueue, launch, makeCtx, execStep, reapAgents, reapDead, run, runCycle, scanAgents, startAgent, writeIssue } from '../engine/runner.mjs';
 import { paths, readJson } from '../engine/state.mjs';
+import { ensureMain } from '../engine/worktree.mjs';
 
 const REPO = resolve(import.meta.dirname, '..').replaceAll('\\', '/'), FAKE = `${REPO}/test/fixtures/fake-cli.mjs`;
 Object.assign(process.env, { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' });
@@ -65,6 +66,24 @@ test('bad config is reported in heartbeat and cycle continues', async () => {
   assert.equal(ok.error, null);
   assert.equal(readJson(E.P.runner).error, null);
   assert.deepEqual(readJson(E.P.runner).waiting, []);
+});
+
+test('a cycle reads the merged config: a changed forja-main is reset first, except while a deploy runs', async () => {
+  const E = mkEnv();
+  g(E.project, 'add', '-f', '.forja/config.json');
+  g(E.project, 'commit', '-qm', 'Add forja config');
+  g(E.project, 'push', '-q', 'origin', 'main');
+  ensureMain(E.cfg);
+  E.on((...a) => (a[0] === 'issue' && a[1] === 'list' ? '[]' : ''));
+  const file = `${E.cfg.paths.main}/.forja/config.json`, tampered = () => put(file, { ...CONFIG, approvers: [] });
+  tampered();
+  put(`${E.state}/run-deploy.json`, { kind: 'deploy', status: 'running', pid: process.pid, startedAt: now() });
+  const held = await runCycle(E.project, E.opts);
+  assert.match(held.error, /approvers/);
+  rmSync(`${E.state}/run-deploy.json`);
+  const ok = await runCycle(E.project, E.opts);
+  assert.equal(ok.error, null);
+  assert.deepEqual(readJson(file).approvers, ['Owner']);
 });
 
 test('scanAgents marks dead worker gone and frees slot', () => {

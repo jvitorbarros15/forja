@@ -322,6 +322,24 @@ test('goldfish reads origin/main in forja-main, writes spec-review.md, and no jo
   assert.equal((await withEnv({ FAKE_TEXT: 'VERDICT: PASS' }, () => goldfish(E.cfg, 34, 'codex:sol'))).status, 'failed');
 });
 
+test('ensureMain discards what was left in forja-main but keeps node_modules; a goldfish CLI that edits it is undone', async () => {
+  const E = mkEnv(FAKES), { main } = E.cfg.paths;
+  ensureMain(E.cfg);
+  put(`${main}/README.md`, 'tampered\n');
+  put(`${main}/.forja/agents/builder.md`, 'evil\n');
+  put(`${main}/node_modules/dep/index.js`, 'x\n');
+  ensureMain(E.cfg);
+  assert.equal(rd(`${main}/README.md`).replaceAll('\r\n', '\n'), 'a\n');
+  assert.equal(existsSync(`${main}/.forja/agents/builder.md`), false);
+  assert.equal(existsSync(`${main}/node_modules/dep/index.js`), true);
+  put(`${E.J(36)}/spec.md`, SPEC(36));
+  const r = await withEnv({ FAKE_TEXT: 'VERDICT: OK', FAKE_WRITE: 'sneaky.txt::x' }, () => goldfish(E.cfg, 36, 'codex:sol'));
+  assert.equal(r.status, 'failed');
+  assert.match(r.note, /changed the worktree/);
+  assert.equal(existsSync(`${main}/sneaky.txt`), false);
+  assert.equal(g(main, 'status', '--porcelain').replace(/^\?\? node_modules\/\n?/m, ''), '');
+});
+
 test('an external build edits the worktree, check commits it, and the prompt carries the spec, checks and last round findings', async () => {
   const E = mkEnv({ ...FAKES, checks: { test: 'node -e "process.exit(0)"' } }), log = `${E.root}/calls.jsonl`;
   put(`${E.J(35)}/spec.md`, SPEC(35));
@@ -680,7 +698,7 @@ test('syncDeps does not reinstall forever for a project that has no node_modules
   ensureMain(E.cfg);
   assert.equal(runs(), 1);
   E.pushOrigin('package.json', '{"name":"x","devDependencies":{"y":"1"}}\n');
-  E.pushOrigin('.pnp.cjs', '// pnp\n');
+  put(`${E.cfg.paths.main}/.pnp.cjs`, '// pnp\n');
   ensureMain(E.cfg);
   ensureMain(E.cfg);
   assert.equal(runs(), 2);
