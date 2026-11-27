@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { loadConfig, ConfigError, globMatch, reviewsFor, tierRank, highestTier, tierOf, PROTECTED } from '../engine/config.mjs';
+import { DEFAULTS, loadConfig, ConfigError, globMatch, reviewsFor, tierRank, highestTier, tierOf, PROTECTED } from '../engine/config.mjs';
 
 function project(config, dir = fs.mkdtempSync(path.join(os.tmpdir(), 'forja-cfg-'))) {
   fs.mkdirSync(path.join(dir, '.forja'), { recursive: true });
@@ -77,6 +77,16 @@ test('custom reviewer is a valid kind and defaults to claude:sonnet', () => {
   try {
     assert.deepEqual(loadConfig(dir).models.review.data, ['claude:sonnet']);
   } finally { cleanup(dir); }
+});
+
+test('loadConfig does not mutate DEFAULTS', () => {
+  const a = project({ ...base, reviewers: { data: { agent: 'x.md' } } });
+  const b = project({ ...base, tiers: [{ id: 'A', describe: 'x', reviews: ['data'], approval: 'owner' }] });
+  try {
+    loadConfig(a);
+    assert.equal('data' in DEFAULTS.models.review, false);
+    assert.throws(() => loadConfig(b), (e) => e.errors.some((s) => /review kind "data"/.test(s)));
+  } finally { cleanup(a, b); }
 });
 
 test('auto approval is accepted with paths', () => {

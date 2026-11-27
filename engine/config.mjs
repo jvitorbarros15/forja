@@ -138,7 +138,7 @@ export function loadConfig(projectDir, { mainDir, pluginRoot } = {}) {
   if (fs.existsSync(file)) {
     try { user = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { throw new ConfigError([`${fwd(file)} is not valid JSON`]); }
   }
-  const cfg = merge(DEFAULTS, user);
+  const cfg = merge(structuredClone(DEFAULTS), user);
   for (const k of Object.keys(cfg.reviewers ?? {})) cfg.models.review[k] ??= ['claude:sonnet'];
   const errors = validateConfig(cfg);
   if (errors.length) throw new ConfigError(errors);
