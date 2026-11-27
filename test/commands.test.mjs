@@ -59,3 +59,10 @@ test('every review agent and prompt limits later rounds to the previous findings
   }
   for (const f of ['engine/prompts/code.md', 'engine/prompts/ui.md']) assert.match(read(f), /\{\{previous\}\}/, f);
 });
+
+test('the vendors setup asks about are the optional vendor CLIs detect looks for, and the config knows each', async () => {
+  const { DEFAULTS } = await import('../engine/config.mjs');
+  const line = read('commands/setup.md').split('\n').find(l => l.includes('Vendors:')), asked = [...line.matchAll(/`(\w+)`/g)].map(m => m[1]);
+  assert.deepEqual(asked, ['codex', 'gemini', 'agy', 'ollama']);
+  assert.deepEqual(Object.keys(DEFAULTS.vendors), asked);
+});

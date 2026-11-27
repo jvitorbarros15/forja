@@ -13,7 +13,7 @@ Set up Forja for the repo in the current directory. Work through the steps in or
    - Default branch: the branch every change merges into. Default: the detected `defaultBranch`, or `main` when none was detected.
    - Approvers: GitHub logins allowed to label issues and run `/approve` or `/redo`. Default: the current gh login.
    - Language: `en` or `pt-BR`. Default: `en`.
-   - Vendors: for each detected CLI (`codex`, `gemini`, `opencode`, `ollama`), enable it or not. Default: all off, Claude only. Say that a different vendor reviews the builder's work when it is enabled.
+   - Vendors: for each detected CLI (`codex`, `gemini`, `agy`, `ollama`), enable it or not. Default: all off, Claude only. Say that a different vendor reviews the builder's work when it is enabled.
    - Models: keep the defaults, or change them role by role. Defaults: spec `claude:sonnet`; specStrong `claude:opus`; build ladder exact, then `claude:haiku`, `claude:sonnet`, `claude:opus`; review code, ui and ponytail `claude:sonnet`; review security `claude:opus`; goldfish, approver and advisor `claude:sonnet`; approverStrong `claude:opus`.
    - Checks: propose commands from `package.json` scripts (for example `npm ci`, `npm run -s typecheck`, `npm test`, `npm run -s build`). Ask the user to accept, edit or skip each one. Default: the proposal.
    - Tiers: show the three default tiers (A, B, C) with their paths, reviews and approval. Ask whether to keep them or change them.

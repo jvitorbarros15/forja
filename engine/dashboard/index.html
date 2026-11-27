@@ -618,7 +618,7 @@ const ACT={
   pause:{tone:'pause',name:'ui.act.pause',sent:'ui.act.pause.sent',done:'ui.act.pause.done'},
   resume:{tone:'pause',name:'ui.act.resume',sent:'ui.act.resume.sent',done:'ui.act.resume.done'}
 };
-const VEND={claude:'Claude',codex:'Codex',gemini:'Gemini',agy:'Agy',opencode:'OpenCode',ollama:'Ollama',local:'Local'};
+const VEND={claude:'Claude',codex:'Codex',gemini:'Gemini',agy:'Agy',ollama:'Ollama',local:'Local'};
 const vName=v=>VEND[v]||cap(String(v||'?'));
 const mName=m=>{const s=String(m||'?'),n=s.slice(s.indexOf(':')+1);return /^[a-z]+$/.test(n)?cap(n):n};
 const reviewName=k=>REVIEW[k]?t(REVIEW[k]):k;

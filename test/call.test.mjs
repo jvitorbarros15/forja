@@ -303,11 +303,11 @@ test('an adapter that cannot start is a failed run with a fixed message', async 
   const E = mkEnv(FAKES), wt = job(E, 33);
   put(`${wt}/src/a.js`, 'export const a = 2;\n');
   await check(E.cfg, 33, 'claude:sonnet', 1);
-  const r = await review(E.cfg, 33, 'code', 'opencode:x', 1);
+  const r = await review(E.cfg, 33, 'code', 'frobnicate:x', 1);
   assert.equal(r.status, 'failed');
-  assert.equal(r.note, 'opencode:x could not be started; check its bin in .forja/config.json.');
+  assert.equal(r.note, 'frobnicate:x could not be started; check its bin in .forja/config.json.');
   assert.match(r.detail, /no adapter/);
-  assert.equal((await build(E.cfg, 33, 'opencode:x', 1)).status, 'failed');
+  assert.equal((await build(E.cfg, 33, 'frobnicate:x', 1)).status, 'failed');
 });
 
 test('goldfish reads origin/main in forja-main, writes spec-review.md, and no job worktree is needed', async () => {

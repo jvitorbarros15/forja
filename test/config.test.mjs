@@ -38,6 +38,12 @@ test('defaultBranch defaults to main and must be a plain branch name', () => {
   }
 });
 
+test('an unsupported vendor such as opencode is not a valid chain entry', () => {
+  assert.equal(DEFAULTS.vendors.opencode, undefined);
+  const dir = project({ ...base, vendors: { opencode: { enabled: true } }, models: { goldfish: ['opencode:x'] } });
+  try { assert.throws(() => loadConfig(dir), (e) => e.errors.some((s) => /bad chain entry "opencode:x"/.test(s))); } finally { cleanup(dir); }
+});
+
 test('pr.requireCi defaults to false and must be a boolean', () => {
   assert.equal(DEFAULTS.pr.requireCi, false);
   for (const [value, ok] of [[true, true], [false, true], ['yes', false], [1, false]]) {

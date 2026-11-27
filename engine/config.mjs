@@ -39,7 +39,6 @@ export const DEFAULTS = {
     codex: { enabled: false, bin: 'codex' },
     gemini: { enabled: false, bin: 'gemini' },
     agy: { enabled: false, bin: 'agy' },
-    opencode: { enabled: false, bin: 'opencode' },
     ollama: { enabled: false, url: 'http://127.0.0.1:11434', triageModel: null },
   },
   reviewers: {},
@@ -70,7 +69,7 @@ function merge(base, over) {
 }
 
 const fwd = (p) => p.replace(/\\/g, '/');
-const ENTRY = /^(claude|codex|gemini|agy|opencode|ollama|local):[\w.:-]+$/;
+const ENTRY = /^(claude|codex|gemini|agy|ollama|local):[\w.:-]+$/;
 
 export function validateConfig(cfg) {
   const errors = [];
