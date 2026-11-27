@@ -84,7 +84,8 @@ export async function check(cfg, n, exec, round, failed = '') {
   const base = git(wt, 'merge-base', `origin/${cfg.defaultBranch}`, 'HEAD').trim();
   // --no-renames: a move lists both paths, so a rename out of a protected or tier folder still counts. Deletions are listed too.
   const files = changedFiles(wt, base);
-  const ui = !!cfg.ui && files.some(f => globMatch(f, cfg.ui.paths)), prot = files.some(f => globMatch(f, PROTECTED));
+  // Protected paths are matched in lower case: Windows and macOS folders are case-insensitive, so .Forja is .forja. A tier's own paths stay exact: a looser match there would allow more.
+  const ui = !!cfg.ui && files.some(f => globMatch(f, cfg.ui.paths)), prot = files.some(f => globMatch(f.toLowerCase(), PROTECTED));
   const tierId = effectiveTier(cfg, field(spec, 'TIER'), readJson(`${dir}/triage.json`, null)), tier = tierOf(cfg, tierId);
   const outside = tier?.paths?.length ? files.filter(f => !globMatch(f, tier.paths)) : [];
   let notes = failed || (!files.length ? L('check.noChanges', { branch: cfg.defaultBranch })

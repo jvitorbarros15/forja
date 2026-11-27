@@ -156,6 +156,17 @@ test('check writes Protected: yes for .forja change', async () => {
   assert.match(rd(`${E.J(12)}/build.md`), /Protected: yes/);
 });
 
+test('a protected path is detected whatever its case', async () => {
+  const E = mkEnv(), wt = job(E, 14);
+  put(`${wt}/.Forja/agents/x.md`, 'x\n');
+  await check(E.cfg, 14, 'claude:sonnet', 1);
+  assert.match(rd(`${E.J(14)}/build.md`), /^BUILD: OK[\s\S]*Protected: yes/);
+  const wf = job(E, 15);
+  put(`${wf}/.GitHub/Workflows/ci.yml`, 'on: push\n');
+  await check(E.cfg, 15, 'claude:sonnet', 1);
+  assert.match(rd(`${E.J(15)}/build.md`), /Protected: yes/);
+});
+
 test('check skips unset commands and passes; configured ones run in order and stop at the first failure', async () => {
   const E = mkEnv(), wt = job(E, 13);
   put(`${wt}/src/a.js`, 'export const a = 2;\n');
