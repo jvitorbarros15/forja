@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { IS_WIN } from '../platform.mjs';
-import { exec } from './proc.mjs';
+import { exec, tail } from './proc.mjs';
 import { usageOf } from './usage.mjs';
 
 // agy takes the prompt on the command line, which Windows caps at 32767 characters.
@@ -14,5 +14,5 @@ export async function run(vcfg, model, { cwd, prompt, write, images = [], timeou
   try {
     const o = JSON.parse(r.out);
     return { ...r, ok: o.status === 'SUCCESS', text: o.response ?? '', usage: usageOf([o.stats ?? o.usage ?? o.usageMetadata]), err: `${r.err}${o.error?.message ? `\n${o.error.message}` : ''}` };
-  } catch { return { ...r, ok: false, text: '', usage: null }; }
+  } catch { return { ...r, ok: false, text: '', usage: null, err: `${r.err}\n${tail(r.out, 5)}` }; }
 }

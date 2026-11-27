@@ -4,10 +4,13 @@ import { renderAgent } from '../registry.mjs';
 import { paths } from '../state.mjs';
 import { exec } from './proc.mjs';
 
+// On Windows the real binary is claude.exe. Order: an existing configured file, the native installer path, the npm
+// package path, then proc.mjs resolves the bare name on PATH (.exe first, then the npm shim's target).
 function bin(cfg) {
   const b = cfg.vendors?.claude?.bin ?? 'claude';
-  const exe = `${process.env.APPDATA}/npm/node_modules/@anthropic-ai/claude-code/bin/claude.exe`.replaceAll('\\', '/');
-  return IS_WIN && b === 'claude' && fs.existsSync(exe) ? exe : b;
+  if (!IS_WIN || b !== 'claude') return b;
+  const known = [`${process.env.USERPROFILE}/.local/bin/claude.exe`, `${process.env.APPDATA}/npm/node_modules/@anthropic-ai/claude-code/bin/claude.exe`];
+  return known.find((f) => fs.existsSync(f)) ?? b;
 }
 
 // Each agent gets an allow-list, not a deny-list: --restricted ignores every settings file and keeps the file tools inside

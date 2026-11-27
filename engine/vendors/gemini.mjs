@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { exec } from './proc.mjs';
+import { exec, tail } from './proc.mjs';
 import { usageOf } from './usage.mjs';
 
 // Flags checked against `gemini --help`: -p turns on headless mode and is appended to stdin; --skip-trust is needed
@@ -19,5 +19,5 @@ export async function run(vcfg, model, { cwd, prompt, write, images = [], timeou
   try {
     const o = JSON.parse(r.out);
     return { ...r, ok: !o.error, text: o.response ?? '', usage: usage(o.stats), err: `${r.err}${o.error?.message ? `\n${o.error.message}` : ''}` };
-  } catch { return { ...r, ok: false, text: '', usage: null }; }
+  } catch { return { ...r, ok: false, text: '', usage: null, err: `${r.err}\n${tail(r.out, 5)}` }; }
 }

@@ -7,6 +7,8 @@ import path from 'node:path';
 import { ask, prompt, diffBlock, runAgent } from '../engine/vendors/index.mjs';
 import { roles } from '../engine/registry.mjs';
 import { DEFAULTS } from '../engine/config.mjs';
+import { IS_WIN } from '../engine/platform.mjs';
+import { exec } from '../engine/vendors/proc.mjs';
 
 const FAKE = path.resolve(import.meta.dirname, 'fixtures/fake-cli.mjs');
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'forja-vendors-')).replace(/\\/g, '/');
@@ -197,6 +199,41 @@ test('runAgent passes allow, deny and add-dir', async () => {
   assert.ok(after('--disallowedTools').includes('WebFetch'));
   assert.deepEqual(after('--add-dir'), [`${cfg.paths.state}/jobs/7`]);
   assert.match(argv[argv.indexOf('--append-system-prompt') + 1], /spec\.md/);
+});
+
+const shim = (body) => {
+  const dir = tmp();
+  fs.copyFileSync(FAKE, `${dir}/fake-cli.mjs`);
+  fs.writeFileSync(`${dir}/tool.cmd`, `@echo off\r\n${body}\r\n`);
+  return `${dir}/tool.cmd`;
+};
+
+test('a .cmd shim rejects multi-line arguments instead of truncating them', { skip: !IS_WIN }, async () => {
+  const bin = shim(`"${process.execPath}" "${FAKE.replace(/\//g, '\\')}" %*`);
+  await assert.rejects(exec(bin, ['--x', 'line one\nline two']), /resolves to a \.cmd\/\.bat shim.*set vendors\.tool\.bin/);
+  await assert.rejects(exec(bin, ['--x', 'y'.repeat(9000)]), /resolves to a \.cmd\/\.bat shim/);
+});
+
+test('a .cmd shim passes single-line arguments intact', { skip: !IS_WIN }, async () => {
+  const bin = shim(`"${process.execPath}" "${FAKE.replace(/\//g, '\\')}" %*`);
+  const log = `${tmp()}/calls.jsonl`;
+  const r = await exec(bin, ['--x', 'one two'], { input: 'in', env: { ...process.env, FAKE_LOG: log } });
+  assert.equal(r.code, 0);
+  assert.deepEqual(JSON.parse(fs.readFileSync(log, 'utf8')).argv, ['--x', 'one two']);
+});
+
+test('an npm-style shim runs its .js target directly, so multi-line arguments survive', { skip: !IS_WIN }, async () => {
+  const bin = shim('"%~dp0\\fake-cli.mjs" %*');
+  const log = `${tmp()}/calls.jsonl`;
+  const r = await exec(bin, ['--x', 'line one\nline two'], { env: { ...process.env, FAKE_LOG: log } });
+  assert.equal(r.code, 0);
+  assert.deepEqual(JSON.parse(fs.readFileSync(log, 'utf8')).argv, ['--x', 'line one\nline two']);
+});
+
+test('prompts read cleanly when denyRead is empty', () => {
+  const { cfg } = mkCfg();
+  cfg.privacy.denyRead = [];
+  assert.match(prompt(cfg, 'goldfish', { spec: 's' }), /Do not read anything outside this folder\./);
 });
 
 test('runAgent kills a run that outlives the agent timeout and reports the pid', async () => {
