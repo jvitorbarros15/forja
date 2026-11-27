@@ -33,6 +33,13 @@ export function locked(file, fn, { long = false } = {}) {
   try { return fn(); } finally { closeSync(fd); try { rmSync(lock, { force: true, maxRetries: 5, retryDelay: 20 }); } catch {} }
 }
 
+// For a write that records something already done (a quota line, a deploy result): the work cannot be undone, so a busy lock
+// is tried again and, if it stays busy, given up on; the caller says what reconciles it later. True when written.
+export function bestEffort(fn, tries = 3) {
+  for (let i = 0; i < tries; i++) try { fn(); return true; } catch (e) { if (!/lock busy/.test(e?.message)) return false; }
+  return false;
+}
+
 export const field = (text, key) => text.match(new RegExp(`^${key}:[ \\t]*(.*)$`, 'm'))?.[1].trim() || null;
 const run = (cmd, a) => execFileSync(cmd, a, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 256e6 });
 export const gh = (...a) => run('gh', a);

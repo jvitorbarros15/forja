@@ -11,7 +11,7 @@ import { t } from './i18n.mjs';
 import { logCall } from './models.mjs';
 import { IS_WIN, alive, killTree, notify as platformNotify, spawnDetached } from './platform.mjs';
 import { roles } from './registry.mjs';
-import { gh as realGh, git, locked, paths, read, readJson, writeJson } from './state.mjs';
+import { bestEffort, gh as realGh, git, locked, paths, read, readJson, writeJson } from './state.mjs';
 import { createTick } from './tick.mjs';
 import { runAgent } from './vendors/claude.mjs';
 import { ensureMain } from './worktree.mjs';
@@ -121,12 +121,12 @@ export async function agentMain(ctx, file) {
     if (job.round !== a.round || !(job.running ?? []).includes(slot)) return { workers };
     e = T.agentEnd(job, a, ok, j?.result ?? r.err);
     // Logged before the slot is freed, so the next tick already knows Claude is at its limit.
-    if (e.limited) logCall(cfg.paths.state, 'claude', issue, slot, true, e.limited);
+    if (e.limited) bestEffort(() => logCall(cfg.paths.state, 'claude', issue, slot, true, e.limited), 1);
     if (e.write) { mkdirSync(dirname(a.out), { recursive: true }); writeFileSync(a.out, e.write); }
     return { ...e.set, workers };
   }, () => e?.event, false);
   // The answer is already in hand: a busy board lock is waited out rather than losing the agent's work.
-  for (let i = 0; ; i++) try { record(); break; } catch (x) { if (i >= 2 || x.message !== 'board lock busy') throw x; }
+  for (let i = 0; ; i++) try { record(); break; } catch (x) { if (i >= 2 || !/lock busy/.test(x.message)) throw x; }
   log(`agent ${a.agent} #${issue} ${ok ? 'ok' : 'failed'}${e ? '' : ' (answer dropped: the job already left that round)'}`);
   if (e && !e.write && e.set.stage === 'needs-you') ctx.notify(L('notify.needsYou', { issue, why: e.event }));
 }
@@ -152,7 +152,7 @@ export function execStep(ctx, s) {
   const { cfg, P, T, ROLES, log, L } = ctx, issues = s.issues ?? (s.issue != null ? [s.issue] : []);
   const set = { ...(s.set ?? {}) }, started = new Set();
   const doSet = () => { for (const n of issues) log(`set #${n} ${asJson(set)} -> ${T.setJob(n, set, s.event)}`); };
-  if (s.command && DEPLOYS.includes(s.step)) editCommands(ctx, (c, id) => id === s.command && (c.status = 'running'));
+  if (s.command && DEPLOYS.includes(s.step)) editCommands(ctx, (c, id) => id === s.command && Object.assign(c, { status: 'running', runAt: new Date().toISOString() }));
   if (!s.after && Object.keys(set).length + (s.event ? 1 : 0) && issues.length) doSet();
   try {
     for (const d of s.do ?? []) {
@@ -221,6 +221,12 @@ export function reapDead(ctx) {
   const { cfg, P, T, L, log } = ctx, state = cfg.paths.state;
   for (const kind of DEPLOYS) {
     const file = `${state}/run-${kind}.json`, r = readJson(file, null);
+    // A run that ended while the board was busy never closed its command: the run file is the record, a run older than the command is not.
+    const raw = readJson(P.commands, []), open = (Array.isArray(raw) ? raw : raw.docs ?? raw.documents ?? []).some(c => (c.data ?? c).action === kind && (c.data ?? c).status === 'running');
+    if (r && r.status !== 'running' && open) {
+      const ended = (r.ids ?? (r.of ? [r.of] : r.issues ?? [])).map(String);
+      editCommands(ctx, c => c.action === kind && c.status === 'running' && ended.includes(String(c.jobId)) && Date.parse(r.endedAt) > Date.parse(c.runAt ?? 0) && Object.assign(c, { status: r.status === 'ok' ? 'done' : 'failed', doneAt: r.endedAt }));
+    }
     if (r?.status !== 'running' || alive(r.pid, r.startedAt, 'node')) continue;
     const test = kind === 'deploy-test', endedAt = new Date().toISOString();
     const why = L('deploy.interrupted', { again: L(test && (r.tries ?? 1) < 3 ? 'deploy.retryTest' : 'deploy.clickAgain') });

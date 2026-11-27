@@ -1,5 +1,5 @@
 import { logCall } from './models.mjs';
-import { createBoard, paths, read, writeJson } from './state.mjs';
+import { bestEffort, createBoard, paths, read, writeJson } from './state.mjs';
 import { parseTriage } from './tick.mjs';
 
 const LANGUAGE = { 'pt-BR': 'Brazilian Portuguese' };
@@ -31,7 +31,7 @@ export async function triage(cfg, n) {
   let out = { tier: '?', bucket: null, reason: '', model: null };
   if (issue) {
     try { out = { ...(await chat(cfg, issue)), model: o.triageModel }; } catch {}
-    logCall(cfg.paths.state, 'ollama', n, 'triage');
+    bestEffort(() => logCall(cfg.paths.state, 'ollama', n, 'triage'));
   }
   out.ms = Date.now() - t0;
   try { writeJson(`${dir}/triage.json`, out); createBoard(cfg).setJob(n, { triage: out }, null, false); } catch {}

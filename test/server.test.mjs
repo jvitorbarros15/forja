@@ -186,3 +186,13 @@ test('a non-local host requires the token', async t => {
     assert.equal((await at('/api/commands', { method: 'POST', body, headers: { 'x-forja-token': s.token, origin: `http://127.0.0.2:${s.port}` } })).status, 201);
   } finally { await s.close(); }
 });
+
+test('a board lock held too long answers 503 and the server keeps running', async () => {
+  await withServer({}, {}, async (s, E) => {
+    put(`${E.P.commands}.lock`, '');
+    const r = await call(s.port, 'POST', '/api/commands', { body: { jobId: '5', action: 'approve' } });
+    assert.equal(r.status, 503);
+    assert.match(r.json().error, /busy/i);
+    assert.equal((await call(s.port, 'GET', '/api/jobs')).status, 200);
+  });
+});

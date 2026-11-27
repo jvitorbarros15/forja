@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { loadConfig } from '../engine/config.mjs';
-import { createBoard, locked, paths, readJson } from '../engine/state.mjs';
+import { bestEffort, createBoard, locked, paths, readJson } from '../engine/state.mjs';
 
 const STATE_URL = new URL('../engine/state.mjs', import.meta.url).href;
 const CONFIG_URL = new URL('../engine/config.mjs', import.meta.url).href;
@@ -173,4 +173,17 @@ test('locked throws when the lock stays busy and removes one a dead process left
     assert.equal(locked(file, () => ++ran), 1);
     assert.ok(!fs.existsSync(`${file}.lock`));
   } finally { cleanup(); }
+});
+
+test('bestEffort retries a busy lock, gives up quietly, and reports whether it wrote', () => {
+  const busy = new Error('board lock busy: x');
+  let n = 0;
+  assert.equal(bestEffort(() => { if (++n < 3) throw busy; }), true);
+  assert.equal(n, 3);
+  n = 0;
+  assert.equal(bestEffort(() => { n++; throw busy; }), false);
+  assert.equal(n, 3);
+  n = 0;
+  assert.equal(bestEffort(() => { n++; throw new Error('disk'); }), false);
+  assert.equal(n, 1);
 });

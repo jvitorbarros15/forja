@@ -668,3 +668,13 @@ test('syncDeps does not reinstall forever for a project that has no node_modules
   ensureMain(E.cfg);
   assert.equal(runs(), 4);
 });
+
+test('a busy board does not stop a deploy, hide that it went live, or fail the run', async () => {
+  const E = mkEnv({ checks: { deploy: `node -e "require('fs').writeFileSync('deployed.flag','1')"` } }), wt = job(E, 66);
+  board(E, [{ issue: 66, stage: 'merged' }]);
+  const T = { setJob: () => { throw new Error('board lock busy: x'); }, upsertWorker: () => { throw new Error('board lock busy: x'); } };
+  const res = await runDeploy(E.cfg, false, ['66'], { gh: () => '', T });
+  assert.equal(res.status, 'ok');
+  assert.equal(existsSync(`${E.cfg.paths.main}/deployed.flag`), true);
+  assert.equal(JSON.parse(rd(`${E.cfg.paths.state}/run-deploy.json`)).status, 'ok');
+});

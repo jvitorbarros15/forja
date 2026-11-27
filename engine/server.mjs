@@ -231,8 +231,10 @@ export async function serve(cfg, o = {}) {
       if (size > max) return;
       let body;
       try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return json(res, 400, { error: L('server.badJson') }); }
-      const [code, out] = await handle(body, req, res);
-      json(res, code, out);
+      // A throw here (a board lock held too long, a disk error) must answer, not become an unhandled rejection that ends the server.
+      let code, out;
+      try { [code, out] = await handle(body, req, res); } catch (e) { [code, out] = /lock busy/.test(e?.message) ? [503, { error: L('server.busy') }] : [500, { error: L('server.failed') }]; }
+      if (!res.headersSent) json(res, code, out);
     });
   }
 

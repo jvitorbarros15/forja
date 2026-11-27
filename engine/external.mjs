@@ -4,7 +4,7 @@ import { check } from './checks.mjs';
 import { PROTECTED, globMatch } from './config.mjs';
 import { t } from './i18n.mjs';
 import { logCall, parseEntry, quota } from './models.mjs';
-import { field, git, paths, read } from './state.mjs';
+import { bestEffort, field, git, paths, read } from './state.mjs';
 import { ask, diffBlock, prompt } from './vendors/index.mjs';
 import { tail } from './vendors/proc.mjs';
 import { ensureMain, setupJob } from './worktree.mjs';
@@ -22,7 +22,8 @@ async function call(cfg, n, kind, entry, opts) {
   if (quota(S)[vendor]?.limitedUntil) return { limited: true };
   let r;
   try { r = await ask(cfg, { entry, ...opts }); } catch (e) { return { rejected: { status: 'failed', note: t(cfg.language, 'err.vendorStart', { entry }), detail: tail(e.message, 5) } }; }
-  logCall(S, vendor, n, kind, r.limited, r.until);
+  // The call is paid for and done: a busy quota file must not turn it into a failed step.
+  bestEffort(() => logCall(S, vendor, n, kind, r.limited, r.until));
   const file = `${paths(cfg).jobs(n)}/.last-${kind}.txt`;
   mkdirSync(dirname(file), { recursive: true });
   // Kept so a "no VERDICT line" failure can be read afterwards.

@@ -176,6 +176,8 @@
   "server.notInQueue": "#{n} is not in the queue.",
   "server.noTitle": "The title is missing.",
   "server.textBig": "Text too large (max 8000 characters).",
+  "server.busy": "Forja is busy writing its own files. Try again in a moment.",
+  "server.failed": "The server could not complete the request.",
   "cli.usage": "usage: cli.mjs detect|init|start|stop|status|doctor --project <dir>",
   "cli.answersBad": "Could not read the answers: {why}",
   "cli.answersUnknown": "Unknown answer key: {key}",

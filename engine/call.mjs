@@ -12,6 +12,7 @@ import { logCall } from './models.mjs';
 import { ciLog, deploy, deployTest, pr, runDeploy, tracked } from './ship.mjs';
 import { ID_RE } from './tick.mjs';
 import { triage } from './triage.mjs';
+import { bestEffort } from './state.mjs';
 import { setupJob } from './worktree.mjs';
 
 const int = s => (/^\d+$/.test(String(s)) ? Number(s) : null);
@@ -29,7 +30,7 @@ export async function run(argv) {
     const ids = [n0, ...a].filter(Boolean);
     return ids.length && ids.every(id => ID_RE.test(id)) ? done(await runDeploy(cfg, cmd === 'deploy-test', ids)) : bad();
   }
-  if (cmd === 'log') return KIND.test(n0 ?? '') && int(a[0]) !== null ? (logCall(cfg.paths.state, n0, int(a[0]), a[1] ?? 'call'), 0) : bad();
+  if (cmd === 'log') return KIND.test(n0 ?? '') && int(a[0]) !== null ? (bestEffort(() => logCall(cfg.paths.state, n0, int(a[0]), a[1] ?? 'call')) ? 0 : 1) : bad();
   if (n === null) return bad();
   const round = int(a.at(-1));
   if (cmd === 'setup') setupJob(cfg, n);

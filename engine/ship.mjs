@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { t } from './i18n.mjs';
 import { parseEntry } from './models.mjs';
-import { gh as realGh, field, git, locked, paths, read, readJson, writeJson } from './state.mjs';
+import { bestEffort, gh as realGh, field, git, locked, paths, read, readJson, writeJson } from './state.mjs';
 import { createTick } from './tick.mjs';
 import { tail } from './vendors/proc.mjs';
 import { ensureMain, expand, removeJob, sh } from './worktree.mjs';
@@ -78,7 +78,13 @@ export async function runDeploy(cfg, test, ids, { gh = realGh, T = createTick(cf
   const note = (id, text, at) => (num(id) ? T.setJob(Number(id), {}, text, false) : edit(id, d => { d.events = [...(d.events ?? []), { at, text }]; }));
   const startedAt = new Date().toISOString(), w = { id: `${cmd}-${Date.parse(startedAt)}`, model: 'local', vendor: 'local', role: cmd, round: 99, startedAt, tokens: null };
   const worker = (id, patch) => { const x = { ...w, ...patch }; if (num(id)) T.upsertWorker(Number(id), x); else edit(id, d => { d.workers = [...(d.workers ?? []).filter(y => y.id !== x.id), x]; }); };
-  for (const id of ids) { note(id, L(test ? 'deploy.testStarted' : 'deploy.started'), startedAt); worker(id, { status: 'running' }); }
+  // Board writes around the deploy are best effort: a busy lock must neither stop the deploy from starting nor hide that it went live.
+  // What is left undone is reconciled later: the tick moves a merged card to deployed from run-deploy.json, and the runner closes
+  // a command still `running` once the run file says the run ended.
+  for (const id of ids) {
+    bestEffort(() => note(id, L(test ? 'deploy.testStarted' : 'deploy.started'), startedAt));
+    bestEffort(() => worker(id, { status: 'running' }));
+  }
   const file = `${cfg.paths.state}/run-${cmd}.json`, issues = ids.filter(num).map(Number);
   // tick runs a dropped test again by itself; `tries` counts the attempts in a row so that stops at three.
   const prev = test ? readJson(file, null) : null, tries = prev?.status === 'failed' && prev.transient ? (prev.tries ?? 1) + 1 : 1;
@@ -89,14 +95,14 @@ export async function runDeploy(cfg, test, ids, { gh = realGh, T = createTick(cf
   if (!ok) writeJson(file, { ...r, detail: r.detail ?? r.note, note: L('deploy.nothingChanged', { why }), ...(test ? { transient: again } : {}) });
   const text = ok ? (test ? r.note : L('deploy.live')) : `${L(test ? 'deploy.testFailed' : 'deploy.failed', { why })}${again && tries < 3 ? ` ${L('deploy.retryTest')}` : ''}`;
   for (const id of ids) {
-    worker(id, { status: ok ? 'ok' : 'failed', endedAt: r.endedAt });
-    note(id, text, r.endedAt);
-    if (ok && !test) {
+    bestEffort(() => worker(id, { status: ok ? 'ok' : 'failed', endedAt: r.endedAt }));
+    bestEffort(() => note(id, text, r.endedAt));
+    if (ok && !test) bestEffort(() => {
       if (num(id)) T.setJob(Number(id), { stage: 'deployed', note: L('event.deployed') }, null, false);
       else edit(id, d => { d.stage = 'deployed'; d.updatedAt = r.endedAt; });
-    }
+    });
   }
-  locked(P.commands, () => {
+  bestEffort(() => locked(P.commands, () => {
     const raw = readJson(P.commands, []), list = Array.isArray(raw) ? raw : raw.docs ?? raw.documents ?? [];
     let hit = false;
     for (const c0 of list) {
@@ -104,7 +110,7 @@ export async function runDeploy(cfg, test, ids, { gh = realGh, T = createTick(cf
       if (c.action === cmd && c.status === 'running' && ids.includes(String(c.jobId))) { c.status = ok ? 'done' : 'failed'; c.doneAt = r.endedAt; hit = true; }
     }
     if (hit) writeJson(P.commands, raw);
-  });
+  }));
   return res;
 }
 

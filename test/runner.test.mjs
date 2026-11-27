@@ -289,3 +289,16 @@ test('the runner follows the merged config in forja-main, not a broken checkout 
   put(`${E.cfg.paths.main}/.forja/config.json`, { ...CONFIG, approvers: [] });
   assert.match((await runCycle(E.project, E.opts)).error, /approvers/);
 });
+
+test('reapDead closes a command whose run ended while the board was busy, but not one that started after that run', () => {
+  const E = mkEnv(), ctx = E.ctx(), ended = new Date(Date.now() - 60e3).toISOString();
+  put(`${E.state}/run-deploy.json`, { kind: 'deploy', pid: 1, startedAt: ended, endedAt: ended, status: 'ok', issues: [41], ids: ['41'] });
+  put(E.P.commands, [
+    { id: 'old', status: 'running', action: 'deploy', jobId: '41', runAt: new Date(Date.now() - 120e3).toISOString() },
+    { id: 'fresh', status: 'running', action: 'deploy', jobId: '41', runAt: new Date().toISOString() },
+    { id: 'other', status: 'running', action: 'deploy', jobId: '99', runAt: new Date(Date.now() - 120e3).toISOString() },
+  ]);
+  reapDead(ctx);
+  assert.deepEqual(readJson(E.P.commands).map(c => c.status), ['done', 'running', 'running']);
+  assert.equal(readJson(E.P.commands)[0].doneAt, ended);
+});

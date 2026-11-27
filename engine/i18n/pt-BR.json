@@ -176,6 +176,8 @@
   "server.notInQueue": "#{n} não está na fila.",
   "server.noTitle": "Falta o título.",
   "server.textBig": "Texto grande demais (máx. 8000 caracteres).",
+  "server.busy": "O Forja está ocupado gravando os próprios arquivos. Tente de novo em instantes.",
+  "server.failed": "O servidor não conseguiu concluir o pedido.",
   "cli.usage": "uso: cli.mjs detect|init|start|stop|status|doctor --project <dir>",
   "cli.answersBad": "Não consegui ler as respostas: {why}",
   "cli.answersUnknown": "Chave de resposta desconhecida: {key}",
