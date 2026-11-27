@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadConfig } from '../engine/config.mjs';
 import { quota } from '../engine/models.mjs';
-import { feedQueue, makeCtx, execStep, reapAgents, reapDead, run, runCycle, scanAgents, startAgent, writeIssue } from '../engine/runner.mjs';
+import { argError, feedQueue, makeCtx, execStep, reapAgents, reapDead, run, runCycle, scanAgents, startAgent, writeIssue } from '../engine/runner.mjs';
 import { paths, readJson } from '../engine/state.mjs';
 
 const REPO = resolve(import.meta.dirname, '..').replaceAll('\\', '/'), FAKE = `${REPO}/test/fixtures/fake-cli.mjs`;
@@ -114,6 +114,13 @@ test('bad --every or --issue exits 1 instead of spinning', async () => {
   }
   assert.match(errs[0], /--every/);
   assert.match(errs.at(-1), /--issue/);
+});
+
+test('argError accepts valid --every and --issue and rejects the rest', () => {
+  assert.equal(argError(15, null), null);
+  assert.equal(argError(0.5, '7'), null);
+  assert.equal(argError(15, '123'), null);
+  for (const [every, only] of [[NaN, null], [0, null], [-1, null], [Infinity, null], [15, 'dd'], [15, ''], [15, '7x'], [15, '-7']]) assert.ok(argError(every, only), `${every} ${only}`);
 });
 
 test('execStep write and run steps', () => {

@@ -350,11 +350,13 @@ export async function runCycle(project, o) {
   return { error, t };
 }
 
+export const argError = (every, only) => (!(every > 0 && Number.isFinite(every)) ? '--every must be a positive number of seconds' : only !== null && !/^\d+$/.test(only) ? '--issue must be an issue number' : null);
+
 export async function run(argv, o = {}) {
   const args = [...argv], flag = k => args.includes(k), val = (k, d) => (flag(k) ? args[args.indexOf(k) + 1] : d);
   const project = val('--project', process.cwd()), agent = val('--agent', null), dry = flag('--dry-run'), once = flag('--once') || dry;
   const every = Number(val('--every', 15)), only = val('--issue', null), logFile = `${stateDir(project)}/logs/agents.log`;
-  const badArg = !(every > 0 && Number.isFinite(every)) ? '--every must be a positive number of seconds' : only !== null && !/^d+$/.test(only) ? '--issue must be an issue number' : null;
+  const badArg = argError(every, only);
   if (badArg) { (o.err ?? console.error)(badArg); return 1; }
   const base = { gh: o.gh, notify: o.notify, launch: o.launch, dry, once, only: only === null ? null : Number(only), every, mem: {}, pending: new Set() };
 
