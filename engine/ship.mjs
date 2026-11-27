@@ -36,10 +36,10 @@ export function pr(cfg, n, { gh = realGh } = {}) {
   const open = JSON.parse(gh('pr', 'list', '-R', cfg.repo, '--head', branch, '--state', 'open', '--json', 'number'));
   if (open.length) return open[0].number;
   const body = cfg.pr.bodyTemplate.replace(/\{(issue|summary)\}/g, (m, k) => (k === 'issue' ? String(n) : summary));
-  return Number(gh('pr', 'create', '-R', cfg.repo, '--base', 'main', '--head', branch, '--title', title, '--body', body).trim().match(/\/pull\/(\d+)/)[1]);
+  return Number(gh('pr', 'create', '-R', cfg.repo, '--base', cfg.defaultBranch, '--head', branch, '--title', title, '--body', body).trim().match(/\/pull\/(\d+)/)[1]);
 }
 
-// deploy and deployTest run in forja-main, after it is fast-forwarded to origin/main; at most one runs at a time.
+// deploy and deployTest run in forja-main, after it is fast-forwarded to the default branch; at most one runs at a time.
 function runIn(cfg, key, retry) {
   if (!cfg.checks[key]) throw new Error(t(cfg.language, 'refuse.noDeployCommand'));
   ensureMain(cfg);

@@ -75,7 +75,7 @@ export function createBoard(cfg, { relabel = () => {}, needOf = null } = {}) {
   function writeDoc(job) {
     const files = [];
     if (job.branch) try {
-      for (const l of git(P.main, 'diff', '--numstat', `origin/main...${job.branch}`).split('\n').filter(Boolean)) {
+      for (const l of git(P.main, 'diff', '--numstat', `origin/${cfg.defaultBranch}...${job.branch}`).split('\n').filter(Boolean)) {
         const [add, del, path] = l.split('\t');
         files.push({ path, add: +add || 0, del: +del || 0 });
       }

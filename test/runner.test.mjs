@@ -22,14 +22,14 @@ const now = () => new Date().toISOString();
 const CONFIG = { repo: 'o/r', approvers: ['Owner'], language: 'en', vendors: { claude: { bin: FAKE } } };
 
 function mkEnv(config = CONFIG) {
-  const root = mkdtempSync(`${tmpdir()}/forja-run-`).replaceAll('\\', '/'), origin = `${root}/origin.git`, project = `${root}/proj`;
-  execFileSync('git', ['init', '-q', '--bare', '-b', 'main', origin]);
+  const root = mkdtempSync(`${tmpdir()}/forja-run-`).replaceAll('\\', '/'), origin = `${root}/origin.git`, project = `${root}/proj`, br = config.defaultBranch ?? 'main';
+  execFileSync('git', ['init', '-q', '--bare', '-b', br, origin]);
   put(`${project}/README.md`, 'a\n');
-  g(project, 'init', '-q', '-b', 'main');
+  g(project, 'init', '-q', '-b', br);
   g(project, 'add', '-A');
   g(project, 'commit', '-qm', 'Add base');
   g(project, 'remote', 'add', 'origin', origin);
-  g(project, 'push', '-q', '-u', 'origin', 'main');
+  g(project, 'push', '-q', '-u', 'origin', br);
   put(`${project}/.forja/config.json`, config);
   const cfg = loadConfig(project, { pluginRoot: REPO }), P = paths(cfg), logs = [], gh = (...a) => { calls.push(a); return handler(...a); };
   const calls = [];
@@ -179,8 +179,8 @@ test('issue.md carries the body only for an approver, case-insensitively', () =>
   assert.doesNotMatch(text, /secret/);
 });
 
-test('startAgent resolves cwd at launch, writes reviewer diff and syncs main before a spec', () => {
-  const E = mkEnv(), launched = [], ctx = E.ctx({ launch: (_, argv) => { launched.push(argv); return { pid: process.pid }; } });
+for (const br of ['main', 'master']) test(`startAgent resolves cwd at launch, writes reviewer diff and syncs main before a spec (${br})`, () => {
+  const E = mkEnv({ ...CONFIG, defaultBranch: br }), launched = [], ctx = E.ctx({ launch: (_, argv) => { launched.push(argv); return { pid: process.pid }; } });
   const a = (agent, issue, extra = {}) => ({ agent, model: 'sonnet', issue, round: 1, out: `${E.J(issue)}/x.md`, cwd: 'ignored', prompt: 'p', ...extra });
   const agentFile = (issue, slot) => readJson(`${E.J(issue)}/agent-${slot}.json`);
   job(E, 12);
@@ -194,7 +194,7 @@ test('startAgent resolves cwd at launch, writes reviewer diff and syncs main bef
   job(E, 11);
   startAgent(ctx, 11, a('approver', 11));
   assert.equal(agentFile(11, 'approver').cwd, E.cfg.paths.main);
-  g(E.project, 'worktree', 'add', '-q', E.WT(11), '-b', 'forja/11-x', 'origin/main');
+  g(E.project, 'worktree', 'add', '-q', E.WT(11), '-b', 'forja/11-x', `origin/${br}`);
   put(`${E.WT(11)}/src.txt`, 'new\n');
   g(E.WT(11), 'add', '-A');
   g(E.WT(11), 'commit', '-qm', 'Add src');

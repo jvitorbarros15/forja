@@ -114,11 +114,11 @@ export async function review(cfg, n, kind, entry, round) {
     writeFileSync(file, `VERDICT: PASS\nReviewer: skipped\nCommit: ${git(wt, 'rev-parse', 'HEAD').trim()}\n- ${t(cfg.language, 'note.uiReviewSkipped')}\n`);
     return { status: 'ok', note: 'VERDICT: PASS (skipped)' };
   }
-  const vars = { spec, diff: diffBlock(vendor, spec, git(wt, 'diff', 'origin/main...HEAD')), images: images.length ? `# Screenshots\n${images.join('\n')}` : '' };
+  const vars = { spec, diff: diffBlock(vendor, spec, git(wt, 'diff', `origin/${cfg.defaultBranch}...HEAD`)), images: images.length ? `# Screenshots\n${images.join('\n')}` : '' };
   return judge(cfg, n, kind, entry, { cwd: wt, file, verdicts: 'PASS|CHANGES', vars, images, commit: true });
 }
 
-// The blind check reads the repo at origin/main: the job has no worktree yet when it runs.
+// The blind check reads the repo at the default branch: the job has no worktree yet when it runs.
 export async function goldfish(cfg, n, entry) {
   ensureMain(cfg);
   const P = paths(cfg);

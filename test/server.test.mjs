@@ -57,8 +57,9 @@ test('api/config hides nothing secret and lists tiers', async () => {
   await withServer(config, {}, async (s, E) => {
     const r = await call(s.port, 'GET', '/api/config'), c = r.json();
     assert.equal(r.status, 200);
-    assert.deepEqual(Object.keys(c), ['repo', 'approvers', 'language', 'tiers', 'reviewKinds', 'vendors', 'strings']);
+    assert.deepEqual(Object.keys(c), ['repo', 'approvers', 'language', 'defaultBranch', 'tiers', 'reviewKinds', 'vendors', 'strings']);
     assert.equal(c.repo, 'o/r');
+    assert.equal(c.defaultBranch, 'main');
     assert.deepEqual(c.approvers, ['Owner']);
     assert.deepEqual(c.tiers.map(x => Object.keys(x)), [['id', 'describe', 'approval'], ['id', 'describe', 'approval'], ['id', 'describe', 'approval']]);
     assert.deepEqual(c.tiers.map(x => x.id), ['A', 'B', 'C']);
@@ -66,6 +67,9 @@ test('api/config hides nothing secret and lists tiers', async () => {
     assert.deepEqual(c.vendors, ['claude', 'codex']);
     assert.equal(typeof c.strings, 'object');
     assert.doesNotMatch(r.text, /denyRead|promptRules|no secrets|token|\/secret\/bin/i);
+  });
+  await withServer({ defaultBranch: 'trunk' }, {}, async s => {
+    assert.equal((await call(s.port, 'GET', '/api/config')).json().defaultBranch, 'trunk');
   });
 });
 

@@ -53,12 +53,12 @@ function syncDeps(cfg) {
   }, { long: true });
 }
 
-// forja-main only ever fast-forwards to origin/main. Nothing is run in the project checkout but fetch and worktree add.
+// forja-main only ever fast-forwards to the default branch. Nothing is run in the project checkout but fetch and worktree add.
 export function ensureMain(cfg) {
   const { project, main } = cfg.paths;
-  git(project, 'fetch', '-q', 'origin', 'main');
-  if (existsSync(main)) git(main, 'merge', '-q', '--ff-only', 'origin/main');
-  else git(project, 'worktree', 'add', '-q', '--detach', main, 'origin/main');
+  git(project, 'fetch', '-q', 'origin', cfg.defaultBranch);
+  if (existsSync(main)) git(main, 'merge', '-q', '--ff-only', `origin/${cfg.defaultBranch}`);
+  else git(project, 'worktree', 'add', '-q', '--detach', main, `origin/${cfg.defaultBranch}`);
   syncDeps(cfg);
 }
 
@@ -68,7 +68,7 @@ const link = (cfg, wt) => {
 };
 
 const mergeMain = (cfg, wt) => {
-  try { git(wt, 'merge', '-q', '--no-edit', 'origin/main'); } catch (e) {
+  try { git(wt, 'merge', '-q', '--no-edit', `origin/${cfg.defaultBranch}`); } catch (e) {
     try { git(wt, 'merge', '--abort'); } catch {}
     throw new Error(t(cfg.language, 'err.mergeConflict', { why: tail(`${e.stdout ?? ''}${e.stderr ?? ''}`, 5) }));
   }
@@ -91,7 +91,7 @@ export function setupJob(cfg, n, branch) {
   if (exists) {
     git(cfg.paths.project, 'worktree', 'add', '-q', wt, branch);
     try { mergeMain(cfg, wt); } catch (e) { removeJob(cfg, n); throw e; }
-  } else git(cfg.paths.project, 'worktree', 'add', '-q', wt, '-b', branch, 'origin/main');
+  } else git(cfg.paths.project, 'worktree', 'add', '-q', wt, '-b', branch, `origin/${cfg.defaultBranch}`);
   try {
     if (cfg.checks.install) install(cfg, wt);
     else link(cfg, wt);

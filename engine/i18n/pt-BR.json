@@ -121,7 +121,7 @@
   "note.reviewHeld": "Só roda depois que as primeiras revisões passam.",
   "refuse.noDeployCommand": "nenhum comando de deploy está configurado",
   "need.readyProtected": "O PR #{pr} está pronto: checagens, revisões, aprovação final e CI passaram. Ele mexe em caminhos protegidos (.forja, workflows ou .claude), que só entram na main com o seu Aprovar.",
-  "check.noChanges": "Nenhuma mudança em relação à origin/main.",
+  "check.noChanges": "Nenhuma mudança em relação à origin/{branch}.",
   "check.outsidePaths": "O nível {tier} só pode mudar arquivos que casam com {paths}; isto muda {files}.",
   "check.nothingChanged": "O construtor não mudou nada nesta rodada.",
   "check.badCommit": "Assunto de commit inválido (precisa casar com {pattern}): {subject}",

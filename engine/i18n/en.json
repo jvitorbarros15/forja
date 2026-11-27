@@ -121,7 +121,7 @@
   "note.reviewHeld": "Runs only after the first reviews pass.",
   "refuse.noDeployCommand": "no deploy command is configured",
   "need.readyProtected": "PR #{pr} is ready: checks, reviews, final approval and CI passed. It touches protected paths (.forja, workflows or .claude), which only go to main with your Approve.",
-  "check.noChanges": "No changes against origin/main.",
+  "check.noChanges": "No changes against origin/{branch}.",
   "check.outsidePaths": "Tier {tier} may only change files matching {paths}; this changes {files}.",
   "check.nothingChanged": "The builder changed nothing this round.",
   "check.badCommit": "Bad commit subject (it must match {pattern}): {subject}",

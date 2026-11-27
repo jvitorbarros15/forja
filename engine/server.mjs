@@ -60,7 +60,7 @@ export async function serve(cfg, o = {}) {
     return [key, r && { status: r.status, startedAt: r.startedAt ?? null, endedAt: r.endedAt ?? null, note: String(r.note ?? '').slice(0, 600), ids: (r.ids ?? (r.of ? [r.of] : r.issues ?? [])).map(String), tries: r.tries ?? 1, transient: !!r.transient }];
   }));
   const config = () => ({
-    repo: R, approvers: cfg.approvers, language: cfg.language,
+    repo: R, approvers: cfg.approvers, language: cfg.language, defaultBranch: cfg.defaultBranch,
     tiers: cfg.tiers.map(x => ({ id: x.id, describe: x.describe, approval: x.approval })),
     reviewKinds: Object.keys(cfg.models.review),
     vendors: ['claude', ...Object.entries(cfg.vendors).filter(([, v]) => v.enabled).map(([n]) => n)],

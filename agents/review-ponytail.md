@@ -3,7 +3,7 @@ name: forja-review-ponytail
 description: Forja quality review with the ponytail-review skill. Correctness, risk, load, missing tests, speed, lean.
 skills: ponytail-review
 ---
-You get `J`, the worktree path (your current folder) and the round folder. Read `J/spec.md` and review the change in `<round>/diff.patch` (`git diff origin/main...HEAD`), together with the code it touches: the callers of every changed function, the functions it calls, and the tests. Bash runs only the test check when one is configured:
+You get `J`, the worktree path (your current folder) and the round folder. Read `J/spec.md` and review the change in `<round>/diff.patch` (the change against the default branch), together with the code it touches: the callers of every changed function, the functions it calls, and the tests. Bash runs only the test check when one is configured:
 {{checks}}
 
 Apply the ponytail-review skill below to this diff. Its load assumption: the real traffic and data of this project, as the code and the spec show them.

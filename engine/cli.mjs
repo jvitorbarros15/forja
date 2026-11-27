@@ -49,6 +49,12 @@ async function playwrightOk(project) {
 const repoOf = project => {
   try { return git(project, 'remote', 'get-url', 'origin').trim().match(/github\.com[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?$/)?.[1] ?? null; } catch { return null; }
 };
+const BRANCH = /^[A-Za-z0-9_][A-Za-z0-9_./-]*$/;
+const defaultBranchOf = (project, repo, tryGh) => {
+  let b = ''; try { b = git(project, 'symbolic-ref', '--short', 'refs/remotes/origin/HEAD').trim().replace(/^origin\//, ''); } catch {}
+  if (!BRANCH.test(b) && repo) b = tryGh('repo', 'view', repo, '--json', 'defaultBranchRef', '--jq', '.defaultBranchRef.name').trim();
+  return BRANCH.test(b) ? b : null;
+};
 const scopesOf = text => (text.match(/Token scopes:\s*(.+)/)?.[1] ?? '').split(',').map(s => s.replace(/['"\s]/g, '')).filter(s => s && s !== 'none');
 
 async function detect(project, o) {
@@ -57,8 +63,9 @@ async function detect(project, o) {
   let scripts = {}, config = null;
   try { scripts = JSON.parse(readFileSync(pkg, 'utf8')).scripts ?? {}; } catch {}
   try { config = JSON.parse(readFileSync(`${project}/.forja/config.json`, 'utf8')); } catch {}
+  const repo = repoOf(project);
   return {
-    repo: repoOf(project), ghUser: tryGh('api', 'user', '--jq', '.login').trim() || null, ghScopes: scopesOf(tryGh('auth', 'status')),
+    repo, defaultBranch: defaultBranchOf(project, repo, tryGh), ghUser: tryGh('api', 'user', '--jq', '.login').trim() || null, ghScopes: scopesOf(tryGh('auth', 'status')),
     node: process.versions.node,
     clis: { ...Object.fromEntries(CLIS.map(c => [c, !!which(c, env)])), playwright: await playwrightOk(project) },
     scripts, config,

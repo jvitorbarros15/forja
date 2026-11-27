@@ -72,6 +72,28 @@ test('init writes minimal config and gitignore line', async () => {
   assert.equal(readFileSync(`${project}/.gitignore`, 'utf8'), 'node_modules/\n.forja/state/\n');
 });
 
+test('init writes defaultBranch only when it is not main', async () => {
+  const { project } = mkProject(null), H = harness();
+  assert.equal(await run(['init', '--project', project, '--answers', JSON.stringify({ ...ANSWERS, defaultBranch: 'master' }), '--no-gh'], H.o), 0);
+  assert.equal(readJson(`${project}/.forja/config.json`).defaultBranch, 'master');
+  assert.equal(await run(['init', '--project', project, '--answers', JSON.stringify({ ...ANSWERS, defaultBranch: 'bad branch' }), '--no-gh'], H.o), 1);
+});
+
+test('detect reports the repo default branch, from origin/HEAD first and gh as the fallback', async () => {
+  const { project } = mkProject(null), H = harness({ ghOut: (...a) => (a[0] === 'repo' ? 'trunk\n' : '') });
+  g(project, 'init', '-q', '-b', 'master');
+  g(project, 'remote', 'add', 'origin', 'https://github.com/o/r.git');
+  H.o.env = { PATH: '' };
+  assert.equal(await run(['detect', '--project', project], H.o), 0);
+  assert.equal(JSON.parse(H.logs.join('\n')).defaultBranch, 'trunk');
+  assert.deepEqual(H.ghCalls.find(a => a[0] === 'repo').slice(0, 3), ['repo', 'view', 'o/r']);
+  g(project, 'symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/master');
+  const H2 = harness({ ghOut: () => { throw new Error('offline'); } });
+  H2.o.env = { PATH: '' };
+  assert.equal(await run(['detect', '--project', project], H2.o), 0);
+  assert.equal(JSON.parse(H2.logs.join('\n')).defaultBranch, 'master');
+});
+
 test('init reads an answers file and creates the labels', async () => {
   const { root, project } = mkProject(null), H = harness();
   put(`${root}/answers.json`, { repo: 'o/r', approvers: ['Owner'] });

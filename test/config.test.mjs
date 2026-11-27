@@ -27,6 +27,17 @@ test('defaults load with only repo', () => {
   } finally { cleanup(dir); }
 });
 
+test('defaultBranch defaults to main and must be a plain branch name', () => {
+  assert.equal(DEFAULTS.defaultBranch, 'main');
+  for (const [value, ok] of [['master', true], ['release/1.x', true], ['', false], ['-x', false], ['a..b', false], ['a b', false], [3, false]]) {
+    const dir = project({ ...base, defaultBranch: value });
+    try {
+      if (ok) assert.equal(loadConfig(dir).defaultBranch, value);
+      else assert.throws(() => loadConfig(dir), (e) => e.errors.some((s) => /defaultBranch/.test(s)), String(value));
+    } finally { cleanup(dir); }
+  }
+});
+
 test('user config merges objects and replaces arrays', () => {
   const dir = project({ ...base, models: { spec: ['claude:opus'] }, queue: { max: 5 } });
   try {

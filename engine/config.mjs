@@ -9,6 +9,7 @@ export const DEFAULTS = {
   repo: null,
   approvers: [],
   language: 'en',
+  defaultBranch: 'main',
   intakeLabel: 'forja',
   worktreeRoot: null,
   checks: { install: null, typecheck: null, test: null, build: null, deployTest: null, deploy: null },
@@ -77,6 +78,7 @@ export function validateConfig(cfg) {
   if (!Array.isArray(cfg.approvers) || !cfg.approvers.length || !cfg.approvers.every((a) => typeof a === 'string' && a)) {
     errors.push('approvers must be a non-empty array of logins');
   }
+  if (typeof cfg.defaultBranch !== 'string' || !/^[A-Za-z0-9_][A-Za-z0-9_./-]*$/.test(cfg.defaultBranch) || cfg.defaultBranch.includes('..')) errors.push('defaultBranch must be a branch name');
   if (!languages().includes(cfg.language)) errors.push(`language "${cfg.language}" is not supported (${languages().join(', ')})`);
 
   const kinds = new Set([...Object.keys(cfg.models?.review ?? {}), ...Object.keys(cfg.reviewers ?? {})]);

@@ -81,13 +81,13 @@ const changedFiles = (wt, base) => [...git(wt, 'diff', '--name-only', '-z', '--n
 export async function check(cfg, n, exec, round, failed = '') {
   const P = paths(cfg), wt = P.wt(n), dir = P.jobs(n), spec = read(`${dir}/spec.md`), L = (k, v) => t(cfg.language, k, v);
   const out = { typecheck: 'skip', test: 'skip', build: 'skip', ui: 'skip' };
-  const base = git(wt, 'merge-base', 'origin/main', 'HEAD').trim();
+  const base = git(wt, 'merge-base', `origin/${cfg.defaultBranch}`, 'HEAD').trim();
   // --no-renames: a move lists both paths, so a rename out of a protected or tier folder still counts. Deletions are listed too.
   const files = changedFiles(wt, base);
   const ui = !!cfg.ui && files.some(f => globMatch(f, cfg.ui.paths)), prot = files.some(f => globMatch(f, PROTECTED));
   const tierId = effectiveTier(cfg, field(spec, 'TIER'), readJson(`${dir}/triage.json`, null)), tier = tierOf(cfg, tierId);
   const outside = tier?.paths?.length ? files.filter(f => !globMatch(f, tier.paths)) : [];
-  let notes = failed || (!files.length ? L('check.noChanges')
+  let notes = failed || (!files.length ? L('check.noChanges', { branch: cfg.defaultBranch })
     : outside.length ? L('check.outsidePaths', { tier: tierId, paths: tier.paths.join(', '), files: outside.join(', ') })
     : !dirty(wt) ? L('check.nothingChanged') : '');
   for (const name of ['typecheck', 'test', 'build']) {

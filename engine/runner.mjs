@@ -96,7 +96,7 @@ export function startAgent(ctx, issue, a) {
   let commit;
   if (role.reviewer) {
     mkdirSync(`${J}/round-${a.round}`, { recursive: true });
-    if (existsSync(WT)) { writeFileSync(`${J}/round-${a.round}/diff.patch`, git(WT, 'diff', 'origin/main...HEAD')); commit = git(WT, 'rev-parse', 'HEAD').trim(); }
+    if (existsSync(WT)) { writeFileSync(`${J}/round-${a.round}/diff.patch`, git(WT, 'diff', `origin/${cfg.defaultBranch}...HEAD`)); commit = git(WT, 'rev-parse', 'HEAD').trim(); }
   }
   // The worktree of a builder is made by the step's setup command, after the tick chose the cwd: resolved here.
   const cwd = a.agent !== 'spec' && existsSync(WT) ? WT : cfg.paths.main;

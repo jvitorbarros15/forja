@@ -32,24 +32,24 @@ const BASE = {
 const FAKES = { vendors: { codex: { enabled: true, bin: FAKE } }, models: { review: { code: ['codex:sol'], ui: ['codex:sol'] }, goldfish: ['codex:sol'] } };
 
 function mkEnv(config = {}) {
-  const root = mkdtempSync(`${tmpdir()}/forja-call-`).replaceAll('\\', '/'), origin = `${root}/origin.git`, project = `${root}/proj`;
-  execFileSync('git', ['init', '-q', '--bare', '-b', 'main', origin]);
+  const root = mkdtempSync(`${tmpdir()}/forja-call-`).replaceAll('\\', '/'), origin = `${root}/origin.git`, project = `${root}/proj`, br = config.defaultBranch ?? 'main';
+  execFileSync('git', ['init', '-q', '--bare', '-b', br, origin]);
   for (const [f, c] of Object.entries(BASE)) put(`${project}/${f}`, c);
-  g(project, 'init', '-q', '-b', 'main');
+  g(project, 'init', '-q', '-b', br);
   g(project, 'add', '-A');
   g(project, 'commit', '-qm', 'Add base');
   g(project, 'remote', 'add', 'origin', origin);
-  g(project, 'push', '-q', '-u', 'origin', 'main');
+  g(project, 'push', '-q', '-u', 'origin', br);
   put(`${project}/.forja/config.json`, { repo: 'o/r', approvers: ['owner'], ...config });
   const cfg = loadConfig(project, { pluginRoot: REPO }), P = paths(cfg);
   const pushOrigin = (file, content) => {
     const dir = `${root}/pusher`;
     if (!existsSync(dir)) execFileSync('git', ['clone', '-q', origin, dir]);
-    g(dir, 'pull', '-q', 'origin', 'main');
+    g(dir, 'pull', '-q', 'origin', br);
     put(`${dir}/${file}`, content);
     g(dir, 'add', '-A');
     g(dir, 'commit', '-qm', `Update ${file}`);
-    g(dir, 'push', '-q', 'origin', 'main');
+    g(dir, 'push', '-q', 'origin', br);
   };
   return { root, origin, project, cfg, P, J: P.jobs, WT: P.wt, pushOrigin };
 }
@@ -693,4 +693,26 @@ test('the exact executor cannot reach a protected folder through its Windows 8.3
   }
   assert.equal(rd(`${wt}/.forja/config.json`), 'a');
   assert.equal(rd(`${wt}/sub/.git/x`), 'a');
+});
+
+test('a repo whose default branch is master: forja-main, job branches, checks, reviews and the PR base all use it', async () => {
+  const E = mkEnv({ ...FAKES, defaultBranch: 'master' }), wt = job(E, 80), seen = [];
+  assert.equal(g(E.cfg.paths.main, 'rev-parse', 'HEAD').trim(), g(E.origin, 'rev-parse', 'master').trim());
+  assert.equal(g(wt, 'rev-list', '--count', 'origin/master..HEAD').trim(), '0');
+  await check(E.cfg, 80, 'codex:sol', 1);
+  assert.match(rd(`${E.J(80)}/build.md`), /No changes against origin\/master/);
+  put(`${wt}/src/a.js`, 'export const a = 2;\n');
+  await check(E.cfg, 80, 'codex:sol', 2);
+  assert.match(rd(`${E.J(80)}/build.md`), /^BUILD: OK/);
+  const log = `${E.root}/calls.jsonl`;
+  await withEnv({ FAKE_LOG: log, FAKE_TEXT: 'VERDICT: PASS\n- fine' }, () => review(E.cfg, 80, 'code', 'codex:sol', 2));
+  assert.match(calls(log)[0].stdin, /export const a = 2/);
+  E.pushOrigin('docs/new.md', 'n\n');
+  setupJob(E.cfg, 80);
+  assert.equal(existsSync(`${wt}/docs/new.md`), true);
+  put(`${E.J(80)}/decision.md`, 'APPROVE\nTier: B\nPR title: Add widget\nPR body: x\nReason: y\n');
+  const gh = (...a) => { seen.push(a); return a[1] === 'list' ? '[]' : 'https://github.com/o/r/pull/9\n'; };
+  assert.equal(pr(E.cfg, 80, { gh }), 9);
+  const create = seen.find(a => a[1] === 'create');
+  assert.equal(create[create.indexOf('--base') + 1], 'master');
 });

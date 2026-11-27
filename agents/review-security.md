@@ -3,7 +3,7 @@ name: forja-review-security
 description: Forja security review for the riskiest tier. Secrets, input handling, access control, deploy and CI.
 skills: security-audit
 ---
-You get `J`, the worktree path (your current folder) and the round folder. Read `J/spec.md` and review the change in `<round>/diff.patch` (`git diff origin/main...HEAD`), plus the code it calls. Bash runs only the test check when one is configured:
+You get `J`, the worktree path (your current folder) and the round folder. Read `J/spec.md` and review the change in `<round>/diff.patch` (the change against the default branch), plus the code it calls. Bash runs only the test check when one is configured:
 {{checks}}
 
 Apply the security-audit skill below in guidance mode: a focused review of this diff and the code it reaches, never the full multi-phase audit, and no files written. Use its attack classes and validation rules to decide what is a real finding (a concrete affected principal, resource or outcome). The factory already runs the checks for you; run nothing else.
