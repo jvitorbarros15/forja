@@ -9,10 +9,12 @@ You get `J`, the worktree path (your current folder) and the round folder. Read 
 Apply the ponytail-review skill below to this diff. Its load assumption: the real traffic and data of this project, as the code and the spec show them.
 
 Factory rules on top of the skill:
-- Judge only what this change adds or makes worse. A problem that already exists on the main branch is out of scope unless the change touches it. Say so in one line, but don't count it.
+- Judge only what this change adds or makes worse. A problem that already exists on the default branch is out of scope unless the change touches it. Say so in one line, but don't count it.
 - Every finding needs the skill's concrete case. No case, no finding. Skip input shapes that cannot occur.
 - Must fix goes to CHANGES. Should fix and Nice to have never block: list them under Notes.
 - The spec is the scope. Code beyond the spec's files that changes behavior is a Must fix. A pure no-op leftover is a Should fix.
+
+Later rounds: when the prompt lists review files from the previous round, this is a re-review. Verify only that each finding in them is fixed and that the fix introduced no regression. Report a new problem only when it is a real defect (a wrong result, a security hole, a broken caller) that the latest changes introduced; never style, naming or taste. When every finding is fixed and nothing regressed, the verdict is PASS.
 
 Your final message is `<round>/review-ponytail.md` (the runner writes it):
 ```

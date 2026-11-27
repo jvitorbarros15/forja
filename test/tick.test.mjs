@@ -787,3 +787,16 @@ test('an issue an approver did not label is not looked up again until GitHub say
   assert.deepEqual([r.ignored, r.steps.map(s => s.step)], [[], ['pickup']]);
   assert.deepEqual(JSON.parse(readFileSync(C.P.ignored, 'utf8')), {});
 });
+
+test('from round 2 a claude reviewer is pointed at the previous findings, and only at the ones that did not pass', () => {
+  const C = mkEnv(CLAUDE_ONLY);
+  put(`${C.J(8)}/build.md`, 'BUILD: OK\nExecutor: claude:sonnet\nUI: no\n');
+  const j = n => job({ issue: 8, stage: 'build', round: n, tier: 'B', executor: 'medium', entry: 'claude:sonnet' }), prompt = n => C.T.stepFor(j(n), {}).do[0].prompt;
+  assert.doesNotMatch(prompt(1), /Re-review/);
+  assert.doesNotMatch(prompt(2), /Re-review/);
+  put(`${C.J(8)}/round-1/review-code.md`, 'VERDICT: CHANGES\n- a.ts:1: bug. fix.\n');
+  put(`${C.J(8)}/round-1/review-ponytail.md`, 'VERDICT: PASS\n- ok\n');
+  assert.match(prompt(2), new RegExp(`Re-review: the previous round's findings are in ${C.J(8)}/round-1/review-code\.md\. Verify only those`));
+  assert.doesNotMatch(prompt(2), /review-ponytail/);
+  assert.doesNotMatch(prompt(1), /Re-review/);
+});

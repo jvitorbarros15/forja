@@ -716,3 +716,15 @@ test('a repo whose default branch is master: forja-main, job branches, checks, r
   const create = seen.find(a => a[1] === 'create');
   assert.equal(create[create.indexOf('--base') + 1], 'master');
 });
+
+test('from round 2 an external reviewer gets the previous findings and is told to verify only those', async () => {
+  const E = mkEnv(FAKES), wt = job(E, 81), log = `${E.root}/calls.jsonl`;
+  put(`${wt}/src/a.js`, 'export const a = 2;\n');
+  await check(E.cfg, 81, 'codex:sol', 1);
+  const stdin = async round => { await withEnv({ FAKE_LOG: log, FAKE_TEXT: 'VERDICT: CHANGES\n- src/a.js:1: wrong value. fix it.' }, () => review(E.cfg, 81, 'code', 'codex:sol', round)); return calls(log).at(-1).stdin; };
+  assert.doesNotMatch(await stdin(1), /^# Previous round findings$/m);
+  assert.match(await stdin(2), /^# Previous round findings\n## review-code\.md\nVERDICT: CHANGES\nReviewer: codex:sol\nCommit: [0-9a-f]+\n- src\/a\.js:1: wrong value\. fix it./m);
+  assert.match(calls(log).at(-1).stdin, /Verify only that each of those findings is fixed/);
+  put(`${E.J(81)}/round-2/review-code.md`, 'VERDICT: PASS\n- checked: a.js:1.\n');
+  assert.doesNotMatch(await stdin(3), /^# Previous round findings$/m);
+});

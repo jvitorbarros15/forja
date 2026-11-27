@@ -45,3 +45,10 @@ test('bundled skills have LICENSE files and are listed in THIRD_PARTY.md', () =>
   assert.ok(existsSync(join(root, 'skills/ponytail-review/SKILL.md')));
   assert.ok(existsSync(join(root, 'skills/forja/SKILL.md')));
 });
+
+test('every review agent and prompt limits later rounds to the previous findings and their regressions', () => {
+  for (const f of ['agents/review-code.md', 'agents/review-ponytail.md', 'agents/review-security.md', 'agents/review-ui.md', 'engine/prompts/code.md', 'engine/prompts/ui.md']) {
+    assert.match(read(f), /Later rounds:[^\n]*re-review[^\n]*introduced; never style, naming or taste/, f);
+  }
+  for (const f of ['engine/prompts/code.md', 'engine/prompts/ui.md']) assert.match(read(f), /\{\{previous\}\}/, f);
+});

@@ -15,6 +15,8 @@ Check at least:
 - Access control: no new endpoint or action that skips an existing authorization check.
 - Deploy, CI and scripts: no widened permissions, no new network targets, no new `curl | sh`-style steps.
 
+Later rounds: when the prompt lists review files from the previous round, this is a re-review. Verify only that each finding in them is fixed and that the fix introduced no regression. Report a new problem only when it is a real defect (a wrong result, a security hole, a broken caller) that the latest changes introduced; never style, naming or taste. When every finding is fixed and nothing regressed, the verdict is PASS.
+
 Your final message is `<round>/review-security.md` (the runner writes it):
 ```
 VERDICT: PASS|CHANGES
