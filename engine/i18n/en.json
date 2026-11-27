@@ -7,7 +7,6 @@
   "comment.needsYou": "Forja: needs you. Details on the dashboard.",
   "comment.failed": "Forja: stopped. Details on the dashboard.",
   "comment.deployed": "Forja: live. PR #{pr}.",
-
   "event.issueReceived": "Issue received",
   "event.writingSpec": "Writing the spec",
   "event.tierOpus": "Tier {tier}: Opus reviews the spec",
@@ -51,7 +50,6 @@
   "event.retrySelf": "{why} Retrying on its own.",
   "event.stepRetry": "Step {step} failed: {why}. Forja retries at {time}, on its own (attempt {n} of {max}).",
   "event.stopped": "Stopped: {why}",
-
   "need.agentNoOutput": "The {name} agent finished without delivering {file}.",
   "need.agentNoOutputDetail": "The {name} agent finished without delivering {file}: {last}.",
   "need.agentStuck": "{why} That was {count} attempts.",
@@ -69,7 +67,6 @@
   "need.stepConflict": "This job's branch conflicts with main: another change already merged touched the same lines ({why}).",
   "need.stepStuck": "The automatic step {step} failed and retrying does not fix it: {why}",
   "need.stepRepeat": "The automatic step {step} failed {n} times in a row: {why}",
-
   "action.retry": "Forja already retried on its own and the error came back. Redo with a note restarts with your note: it rewrites the spec (before the build) or opens a new build round. If the error comes back, tell the supervisor.",
   "action.specEscalate": "Only you decide: the request needs something Forja does not do on its own (data collection, secrets, or the issue is ambiguous). Answer with Redo and a note saying what to do.",
   "action.checksAllFail": "Only you decide the next step: Redo with a more precise note, or split the issue into smaller parts.",
@@ -80,14 +77,11 @@
   "action.mergeBlocked": "Forja only merges reviewed code. Redo with a note restarts the round.",
   "action.readyTier": "See the diff on the PR. Approve merges it; Redo with a note asks for changes.",
   "action.conflict": "Forja does not resolve conflicts on its own. Ask the supervisor to update the branch by hand; then use Redo with a note.",
-
   "notify.stopped": "Forja #{issue} stopped: {why}",
   "notify.needsYou": "Forja #{issue} needs you: {why}",
   "notify.levelC": "Forja: PR #{pr} (tier {tier}) ready for your Approve. {url}",
-
   "note.agentLost": "Agent stopped without a response ({kinds}); Forja relaunches it on its own",
   "note.agentOld": "Agent from a round that already passed was ended ({kinds})",
-
   "deploy.started": "Deploy started: uploads the version, checks the preview and only then promotes it (~15 min)",
   "deploy.testStarted": "Deploy test started (publishes nothing, ~10 min)",
   "deploy.live": "Live. Version checked on the preview and promoted.",
@@ -102,5 +96,25 @@
   "deploy.reason.fileLock": "the system locked a file in the build folder (EPERM). Try again.",
   "deploy.reason.login": "the provider refused the deploy login. The login needs to be redone.",
   "deploy.reason.promote": "the version was uploaded, but the preview check failed, so it was not promoted.",
-  "deploy.reason.uiCheck": "the UI check (verify:ui) found a problem."
+  "deploy.reason.uiCheck": "the UI check (verify:ui) found a problem.",
+  "event.deployed": "Live",
+  "need.approverNoReason": "no reason written",
+  "need.noReviewedBuild": "there is no reviewed build",
+  "need.buildNotReviewed": "the current build has not been reviewed yet ({kinds})",
+  "need.stepCrash": "Step {step} failed: {why}",
+  "note.agentSilent": "the agent process stopped without responding",
+  "refuse.reviewsPending": "the reviews have not finished yet ({kinds})",
+  "refuse.prNotOpen": "the PR is not open",
+  "refuse.ciRed": "CI on the PR is red",
+  "refuse.nothingToApprove": "nothing to approve; use redo with a note",
+  "refuse.approveStage": "nothing to approve at stage {stage}",
+  "refuse.redoNote": "redo needs a note",
+  "refuse.alreadyMerged": "already merged",
+  "refuse.busy": "wait for what is running to finish",
+  "refuse.invalidJob": "invalid jobId",
+  "refuse.repeated": "repeated request",
+  "refuse.deployRunning": "a deploy or deploy test is already running",
+  "refuse.noJob": "job does not exist",
+  "refuse.unknownAction": "unknown action: {action}",
+  "refuse.nothingToDeploy": "nothing merged waiting for deploy"
 }

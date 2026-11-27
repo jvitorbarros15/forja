@@ -7,7 +7,6 @@
   "comment.needsYou": "Forja: precisa de você. Detalhes no painel.",
   "comment.failed": "Forja: parou. Detalhes no painel.",
   "comment.deployed": "Forja: no ar. PR #{pr}.",
-
   "event.issueReceived": "Issue recebida",
   "event.writingSpec": "Escrevendo a especificação",
   "event.tierOpus": "Nível {tier}: Opus revisa a especificação",
@@ -51,7 +50,6 @@
   "event.retrySelf": "{why} Tentando de novo sozinha.",
   "event.stepRetry": "O passo {step} falhou: {why}. A Forja tenta de novo às {time}, sozinha (nova tentativa {n} de {max}).",
   "event.stopped": "Parou: {why}",
-
   "need.agentNoOutput": "O agente {name} terminou sem entregar {file}.",
   "need.agentNoOutputDetail": "O agente {name} terminou sem entregar {file}: {last}.",
   "need.agentStuck": "{why} Foram {count} tentativas.",
@@ -69,7 +67,6 @@
   "need.stepConflict": "O branch deste job conflita com a main: outra mudança já mergeada mexeu nas mesmas linhas ({why}).",
   "need.stepStuck": "O passo automático {step} falhou e tentar de novo não resolve: {why}",
   "need.stepRepeat": "O passo automático {step} falhou {n} vezes seguidas: {why}",
-
   "action.retry": "A Forja já tentou de novo sozinha e o erro se repetiu. Refazer com uma nota recomeça com a sua nota: reescreve a especificação (antes da construção) ou abre uma nova rodada de construção. Se o erro voltar, avise o supervisor.",
   "action.specEscalate": "Só você decide: o pedido precisa de algo que a Forja não faz por conta própria (coleta de dados, segredos, ou a issue está ambígua). Responda com Refazer e uma nota dizendo o que fazer.",
   "action.checksAllFail": "Só você decide o próximo passo: Refazer com uma nota mais precisa, ou divida a issue em partes menores.",
@@ -80,14 +77,11 @@
   "action.mergeBlocked": "A Forja só faz merge de código revisado. Refazer com uma nota recomeça a rodada.",
   "action.readyTier": "Veja o diff no PR. Aprovar faz o merge; Refazer com uma nota pede mudanças.",
   "action.conflict": "A Forja não resolve conflito sozinha. Peça ao supervisor para atualizar o branch à mão; depois use Refazer com uma nota.",
-
   "notify.stopped": "Forja #{issue} parou: {why}",
   "notify.needsYou": "Forja #{issue} precisa de você: {why}",
   "notify.levelC": "Forja: PR #{pr} (nível {tier}) pronto para o seu Aprovar. {url}",
-
   "note.agentLost": "Agente parado sem resposta ({kinds}); a Forja relança sozinha",
   "note.agentOld": "Agente de uma rodada que já passou foi encerrado ({kinds})",
-
   "deploy.started": "Deploy iniciado: sobe a versão, confere na prévia e só então promove (~15 min)",
   "deploy.testStarted": "Teste de deploy iniciado (sem publicar, ~10 min)",
   "deploy.live": "No ar. Versão conferida na prévia e promovida.",
@@ -102,5 +96,25 @@
   "deploy.reason.fileLock": "o sistema travou um arquivo da pasta de build (EPERM). Tente de novo.",
   "deploy.reason.login": "o provedor recusou o login do deploy. Precisa refazer o login.",
   "deploy.reason.promote": "a versão subiu, mas a conferência na prévia falhou, então ela não foi promovida.",
-  "deploy.reason.uiCheck": "a checagem da interface (verify:ui) encontrou um problema."
+  "deploy.reason.uiCheck": "a checagem da interface (verify:ui) encontrou um problema.",
+  "event.deployed": "No ar",
+  "need.approverNoReason": "sem motivo escrito",
+  "need.noReviewedBuild": "não há construção revisada",
+  "need.buildNotReviewed": "a construção atual ainda não foi revisada ({kinds})",
+  "need.stepCrash": "O passo {step} falhou: {why}",
+  "note.agentSilent": "o processo do agente parou sem responder",
+  "refuse.reviewsPending": "as revisões ainda não terminaram ({kinds})",
+  "refuse.prNotOpen": "o PR não está aberto",
+  "refuse.ciRed": "o CI do PR está vermelho",
+  "refuse.nothingToApprove": "nada para aprovar; use refazer com uma nota",
+  "refuse.approveStage": "nada para aprovar na etapa {stage}",
+  "refuse.redoNote": "refazer precisa de uma nota",
+  "refuse.alreadyMerged": "já mergeado",
+  "refuse.busy": "espere terminar o que está rodando",
+  "refuse.invalidJob": "jobId inválido",
+  "refuse.repeated": "pedido repetido",
+  "refuse.deployRunning": "já tem um deploy ou teste de deploy rodando",
+  "refuse.noJob": "job não existe",
+  "refuse.unknownAction": "ação desconhecida: {action}",
+  "refuse.nothingToDeploy": "nada mergeado esperando deploy"
 }
