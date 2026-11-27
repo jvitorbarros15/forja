@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { strings, t } from './i18n.mjs';
-import { aliveAsync } from './platform.mjs';
+import { alive, aliveAsync } from './platform.mjs';
 import { loadProjectConfig } from './config.mjs';
 import { idsOf, locked, paths, pruneCommands, read, readJson, writeJson } from './state.mjs';
 import { ID_RE } from './tick.mjs';
@@ -57,6 +57,7 @@ export async function serve(cfg, o = {}) {
     token = read(file).trim() || null;
     if (!token) { token = randomBytes(24).toString('hex'); writeFileSync(file, `${token}\n`); }
   }
+  const cookieSafe = !!token && /^[A-Za-z0-9_-]+$/.test(token);
 
   const jobs = () => readdirSync(P.docs).filter(f => f.endsWith('.json')).map(f => rj(`${P.docs}/${f}`, null)).filter(Boolean);
   const commands = () => { const c = rj(P.commands, []); return Array.isArray(c) ? pruneCommands(c) : []; };
@@ -67,10 +68,14 @@ export async function serve(cfg, o = {}) {
     const key = `${r.pid}:${r.at}`;
     if (aliveCache?.key === key && Date.now() - aliveCache.at < ALIVE_TTL) return { ...r, alive: aliveCache.val };
     if (alivePending?.key !== key) {
-      const fallback = aliveCache?.pid === r.pid ? aliveCache.val : false;
+      const cached = aliveCache?.pid === r.pid ? aliveCache.val : undefined;
       const p = Promise.resolve(isAlive(r.pid, r.at, 'node')).then(
         val => { if (alivePending?.p === p) { aliveCache = { key, pid: r.pid, val, at: Date.now() }; alivePending = null; } return val; },
-        () => { if (alivePending?.p === p) { aliveCache = { key, pid: r.pid, val: fallback, at: Date.now() }; alivePending = null; } return fallback; }
+        () => {
+          const val = cached ?? alive(r.pid, r.at, 'node');
+          if (alivePending?.p === p) { aliveCache = { key, pid: r.pid, val, at: Date.now() }; alivePending = null; }
+          return val;
+        }
       );
       alivePending = { key, p };
     }
@@ -239,7 +244,7 @@ export async function serve(cfg, o = {}) {
     } catch { return [200, { tier: '?' }]; } finally { if (triaging.get(who) === ac) triaging.delete(who); }
   }
 
-  let origins = [];
+  let origins = [], cookieName = '';
   function postJson(req, res, max, handle) {
     const og = req.headers.origin;
     const sameOrigin = og && token && (() => { try { return new URL(og).host === req.headers.host; } catch { return false; } })();
@@ -325,8 +330,8 @@ export async function serve(cfg, o = {}) {
     }
     if (token) {
       const explicit = eqToken(url.searchParams.get('t'), token) || eqToken(req.headers['x-forja-token'], token);
-      if (!explicit && !eqToken(cookieOf(req.headers.cookie, 'forja_token'), token)) return json(res, 401, { error: L('server.token') });
-      if (explicit) res.setHeader('set-cookie', `forja_token=${token}; HttpOnly; SameSite=Strict; Path=/`);
+      if (!explicit && !eqToken(cookieOf(req.headers.cookie, cookieName), token)) return json(res, 401, { error: L('server.token') });
+      if (explicit && cookieSafe) res.setHeader('set-cookie', `${cookieName}=${token}; HttpOnly; SameSite=Strict; Path=/`);
     }
     const get = req.method === 'GET', is = p => url.pathname === p;
 
@@ -371,6 +376,7 @@ export async function serve(cfg, o = {}) {
     try { await listen(first === 0 ? 0 : first + i); break; } catch (e) { if (e.code !== 'EADDRINUSE' || i >= PORT_TRIES) throw e; }
   }
   const port = server.address().port;
+  cookieName = `forja_token_${port}`;
   origins = ['127.0.0.1', 'localhost', '[::1]'].map(h => `http://${h}:${port}`);
   writeJson(`${state}/server.json`, { pid: process.pid, port, host, startedAt: new Date().toISOString() });
 
