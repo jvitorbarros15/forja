@@ -1,7 +1,7 @@
 // The runner: cycle, step executor, agent launcher and reaper. Each env is a temp git repo with a bare "origin";
 // claude is the fake CLI, gh is a fake function and agents/launchers are stubbed unless a test runs one for real. No network.
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
@@ -107,7 +107,7 @@ test('scanAgents marks dead worker gone and frees slot', () => {
   assert.deepEqual(b.agentRetry, ['builder']);
 });
 
-test('reapAgents kills an old-round agent and its claude child, only when the start time verifies', async () => {
+test('reapAgents kills an old-round agent and its claude child, only when the start time verifies', { timeout: 60e3 }, async () => {
   const E = mkEnv(), ctx = E.ctx(), spawnFake = () => spawn(process.execPath, [FAKE], { stdio: ['pipe', 'ignore', 'ignore'] });
   const closed = c => new Promise(r => c.on('close', r)), alive = c => c.exitCode === null && c.signalCode === null;
   const [a, ac, b, bc] = [spawnFake(), spawnFake(), spawnFake(), spawnFake()];
@@ -169,7 +169,7 @@ test('execStep sets deploy command running before the call and passes bg argumen
   assert.equal(readJson(E.P.commands)[0].status, 'running');
 });
 
-test('second runner on same project exits with lock error', async () => {
+test('second runner on same project exits with lock error', { timeout: 60e3 }, async () => {
   const E = mkEnv(), errs = [], holder = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { stdio: 'ignore' });
   E.on((...a) => (a[0] === 'issue' && a[1] === 'list' ? '[]' : ''));
   try {
@@ -244,7 +244,7 @@ test('starting a spec agent syncs forja-main without running the dependency inst
   assert.equal(existsSync(`${E.cfg.paths.main}/installed.txt`), false);
 });
 
-test('launch sends the process output to logFile, also through the Windows launcher', async () => {
+test('launch sends the process output to logFile, also through the Windows launcher', { timeout: 60e3 }, async () => {
   const E = mkEnv(), logFile = `${E.root}/state/logs/runner.log`, script = `${E.root}/say.mjs`;
   put(script, 'console.log("hello out"); console.error("hello err");');
   launch({ cfg: E.cfg, once: false }, [script], { logFile });
@@ -254,7 +254,7 @@ test('launch sends the process output to logFile, also through the Windows launc
   assert.match(log, /hello err/);
 });
 
-test('an agent process writes its output file and frees its slot in one board write', async () => {
+test('an agent process writes its output file and frees its slot in one board write', { timeout: 60e3 }, async () => {
   const E = mkEnv(), log = `${E.root}/fake.log`;
   job(E, 9, { stage: 'approve', running: ['approver'] });
   await withFake({ FAKE_TEXT: 'APPROVE\nTier: B\nPR title: Add x', FAKE_LOG: log }, () => launchReal(E, 9, 'approver'));
@@ -262,10 +262,10 @@ test('an agent process writes its output file and frees its slot in one board wr
   const b = readJson(E.P.board).jobs[0], w = b.workers.find(x => x.id === 'approver-1');
   assert.deepEqual(b.running, []);
   assert.deepEqual([w.status, w.tokens], ['ok', { input: 3, output: 4, total: 7 }]);
-  assert.equal(JSON.parse(rd(log).trim().split('\n')[0]).cwd.replaceAll('\\', '/'), E.cfg.paths.main);
+  assert.equal(realpathSync(JSON.parse(rd(log).trim().split('\n')[0]).cwd), realpathSync(E.cfg.paths.main));
 });
 
-test('a Claude limit hit is logged to the quota file and spends no retry', async () => {
+test('a Claude limit hit is logged to the quota file and spends no retry', { timeout: 60e3 }, async () => {
   const E = mkEnv();
   job(E, 9, { stage: 'approve', running: ['approver'] });
   await withFake({ FAKE_LIMIT: '1' }, () => launchReal(E, 9, 'approver'));
@@ -277,7 +277,7 @@ test('a Claude limit hit is logged to the quota file and spends no retry', async
   assert.equal(existsSync(`${E.J(9)}/decision.md`), false);
 });
 
-test('a Claude reviewer that dirties the worktree fails without writing its review file', async () => {
+test('a Claude reviewer that dirties the worktree fails without writing its review file', { timeout: 60e3 }, async () => {
   const E = mkEnv();
   g(E.project, 'worktree', 'add', '-q', E.WT(15), '-b', 'forja/15-x', 'origin/main');
   const runReview = async (vars) => {
@@ -410,7 +410,7 @@ test('feedQueue updates queue.json under its lock without overwriting concurrent
   assert.deepEqual(readJson(E.P.queue), [99]);
 });
 
-test('acquireLock is atomic across concurrent processes and takes over a dead PID lock', async () => {
+test('acquireLock is atomic across concurrent processes and takes over a dead PID lock', { timeout: 60e3 }, async () => {
   const E = mkEnv(), lock = `${E.state}/.runner.lock`;
   put(lock, String(deadPid()));
   const release = acquireLock(lock, (_, v) => `already running ${v.pid}`);

@@ -1,6 +1,6 @@
 // Worktrees, checks, external calls, shipping and triage. Each env is a temp git repo with a bare "origin"; vendors are the fake CLI and gh is a fake. No network.
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
@@ -17,6 +17,8 @@ import { triage } from '../engine/triage.mjs';
 import { cleanMain, ensureMain, removeJob, setupJob } from '../engine/worktree.mjs';
 
 const REPO = resolve(import.meta.dirname, '..').replaceAll('\\', '/');
+// A child reports its cwd resolved: on macOS os.tmpdir() sits behind the /var -> /private/var symlink.
+const real = p => realpathSync(p).replaceAll('\\', '/');
 const FAKE = `${REPO}/test/fixtures/fake-cli.mjs`, CALL = `${REPO}/engine/call.mjs`;
 Object.assign(process.env, { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' });
 const put = (p, v) => { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, typeof v === 'string' ? v : JSON.stringify(v)); };
@@ -274,7 +276,7 @@ test('external review writes review file and logs limited call', async () => {
   assert.equal(rd(`${E.J(31)}/round-1/review-code.md`), `VERDICT: CHANGES\nReviewer: codex:sol\nCommit: ${g(wt, 'rev-parse', 'HEAD').trim()}\n- src/a.js:1: wrong value. fix it.\n`);
   assert.ok(rd(`${E.J(31)}/build.md`).includes(`Commit: ${g(wt, 'rev-parse', '--short', 'HEAD').trim()} `));
   const [c] = calls(log);
-  assert.equal(c.cwd.replaceAll('\\', '/'), wt);
+  assert.equal(real(c.cwd), real(wt));
   assert.match(c.stdin, /Review this change against the spec/);
   assert.match(c.stdin, /Add job 31/);
   assert.match(c.stdin, /# Diff[\s\S]*export const a = 2;/);
@@ -318,7 +320,7 @@ test('goldfish reads origin/main in forja-main, writes spec-review.md, and no jo
   const r = await withEnv({ FAKE_LOG: log, FAKE_TEXT: 'VERDICT: GAPS\n- gap: BEFORE text missing (src/a.js:1)' }, () => goldfish(E.cfg, 34, 'codex:sol'));
   assert.equal(r.status, 'ok');
   assert.equal(rd(`${E.J(34)}/spec-review.md`), 'VERDICT: GAPS\nReviewer: codex:sol\n- gap: BEFORE text missing (src/a.js:1)\n');
-  assert.equal(calls(log)[0].cwd.replaceAll('\\', '/'), E.cfg.paths.main);
+  assert.equal(real(calls(log)[0].cwd), real(E.cfg.paths.main));
   assert.equal(existsSync(E.WT(34)), false);
   assert.equal((await withEnv({ FAKE_TEXT: 'VERDICT: PASS' }, () => goldfish(E.cfg, 34, 'codex:sol'))).status, 'failed');
 });
