@@ -8,6 +8,7 @@ Set up Forja for the repo in the current directory. Work through the steps in or
 1. Run `node "${CLAUDE_PLUGIN_ROOT}/engine/cli.mjs" detect --project "$PWD"`. Read its output.
 2. Show the user what was found: repo, default branch, gh login and scopes, optional CLIs on PATH, package scripts, and any existing `.forja/config.json`. Keep it short.
 3. Ask the questions below, one question at a time. Wait for the answer before asking the next. Every question shows its default; the user can press enter or type "default" to accept it.
+   - Setup mode, always the first question: **Quick setup** or **Customize**. Quick setup uses Claude only, owner approval on every tier, the detected checks (the proposal from `package.json` scripts, none when there are none), the detected default branch, the detected repo, the current gh login as the only approver, language `en`, the default tiers and models, no auto-merge, no auto deploy and no deploy commands. If the user picks Quick setup, skip every question below (except the repo or approver when detect found none), show the summary and go to step 4 with the user's one confirmation. If they pick Customize, ask all of them.
    - Repo: the detected `owner/name`. Default: detected value.
    - Default branch: the branch every change merges into. Default: the detected `defaultBranch`, or `main` when none was detected.
    - Approvers: GitHub logins allowed to label issues and run `/approve` or `/redo`. Default: the current gh login.

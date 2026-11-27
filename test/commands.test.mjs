@@ -35,6 +35,13 @@ test('setup asks one question at a time and explains tier approval', () => {
   assert.match(text, /paths/);
 });
 
+test('setup opens with Quick setup or Customize, and quick setup keeps owner approval', () => {
+  const text = read('commands/setup.md');
+  assert.ok(text.indexOf('Setup mode, always the first question') < text.indexOf('- Repo:'));
+  assert.match(text, /\*\*Quick setup\*\* or \*\*Customize\*\*/);
+  assert.match(text, /Quick setup uses Claude only, owner approval on every tier, the detected checks[^\n]*detected default branch/);
+});
+
 test('bundled skills have LICENSE files and are listed in THIRD_PARTY.md', () => {
   for (const dir of ['security-audit', 'ponytail-review']) {
     assert.ok(existsSync(join(root, 'skills', dir, 'LICENSE')), `${dir} LICENSE`);
