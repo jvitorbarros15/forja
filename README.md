@@ -15,25 +15,6 @@
   <img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-D97757">
 </p>
 
-<table align="center">
-  <tr>
-    <td valign="top">
-      <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dashboard-1440-dark.png">
-        <img alt="Forja dashboard on desktop" src="docs/screenshots/dashboard-1440-light.png" width="720">
-      </picture>
-    </td>
-    <td valign="top">
-      <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dashboard-390-dark.png">
-        <img alt="Forja dashboard on a phone" src="docs/screenshots/dashboard-390-light.png" width="240">
-      </picture>
-    </td>
-  </tr>
-</table>
-
-The local dashboard shows each job, the stage it is in, its reviews and the buttons to approve, redo or deploy. It works on a desktop and on a phone.
-
 ## Why Forja
 
 You label an issue, and Forja writes a spec, builds the change in its own git worktree, has a different model review it, opens a pull request, waits for your approval, and merges it. You watch and approve from the dashboard or from PR comments.
@@ -124,6 +105,27 @@ Reviews run in two passes. `code` and `ui` run first. `ponytail` and `security` 
 
 - **ponytail** is the code-quality review: is the logic right, is it safe, does it hold under real load, is risky code tested, and is every line needed.
 - **goldfish** is a blind check of the spec before any code is built. An external (non-Claude) model configured in `models.goldfish` sees only the spec and the repo, not the issue thread, and tries to break the spec: missed cases, wrong files, criteria that cannot be checked. Without a non-Claude entry in `models.goldfish` (including the default Claude-only setup), goldfish is skipped.
+
+## Dashboard
+
+<table align="center">
+  <tr>
+    <td valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dashboard-1440-dark.png">
+        <img alt="Forja dashboard on desktop" src="docs/screenshots/dashboard-1440-light.png" width="720">
+      </picture>
+    </td>
+    <td valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dashboard-390-dark.png">
+        <img alt="Forja dashboard on a phone" src="docs/screenshots/dashboard-390-light.png" width="240">
+      </picture>
+    </td>
+  </tr>
+</table>
+
+The local dashboard shows each job, the stage it is in, its reviews and the buttons to approve, redo or deploy. It works on a desktop and on a phone.
 
 ## Safety model
 
