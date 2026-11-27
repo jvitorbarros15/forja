@@ -6,12 +6,12 @@
     "install": "npm ci --ignore-scripts",
     "typecheck": "npm run -s typecheck",
     "test": "npm test",
-    "build": "npm run -s build:full -- --out dist --portraits data/private/portraits --data-root data/private/worktrees/historical-people/data --ceiling-root data --noindex",
-    "deployTest": "npm run -s deploy:test -- --portraits data/private/portraits --data-root data/private/worktrees/historical-people/data --ceiling-root data --dry-run",
-    "deploy": "npm run -s deploy:test -- --portraits data/private/portraits --data-root data/private/worktrees/historical-people/data --ceiling-root data --yes"
+    "build": "npm run -s build:full -- --out dist --portraits {project}/data/private/portraits --data-root {project}/data/private/worktrees/historical-people/data --ceiling-root {project}/data --noindex",
+    "deployTest": "npm run -s deploy:test -- --portraits {project}/data/private/portraits --data-root {project}/data/private/worktrees/historical-people/data --ceiling-root {project}/data --dry-run",
+    "deploy": "npm run -s deploy:test -- --portraits {project}/data/private/portraits --data-root {project}/data/private/worktrees/historical-people/data --ceiling-root {project}/data --yes"
   },
   "ui": {
-    "paths": ["real/**", "**/*.css"],
+    "paths": ["real/**/*.html", "real/**/*.css", "real/**/*.js", "real/**/*.ts", "scripts/verify-ui.cjs"],
     "serve": "node node_modules/tsx/dist/cli.mjs src/server.ts",
     "verify": "npm run -s verify:ui",
     "widths": [390, 1440]

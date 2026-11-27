@@ -1,6 +1,6 @@
 # Forja
 
-Forja is a software factory for your GitHub repository. You label an issue, and Forja writes a spec, builds the change in its own git worktree, has a different model review it, waits for your approval, opens a pull request and merges it. You watch and approve from a local dashboard or from PR comments.
+Forja is a software factory for your GitHub repository. You label an issue, and Forja writes a spec, builds the change in its own git worktree, has a different model review it, opens a pull request, waits for your approval, and merges it. You watch and approve from a local dashboard or from PR comments.
 
 It runs as a Claude Code plugin with a small Node 22 engine and no npm dependencies.
 
@@ -8,18 +8,22 @@ It runs as a Claude Code plugin with a small Node 22 engine and no npm dependenc
 
 ```
  issue labeled "forja"
-        |
-        v
-  spec ------> build ------> review -------> approve ------> pr ------> merged ------> deployed
-  (Claude)    (own worktree)  (code, ui, ponytail,  (owner click or    (opens a PR)  (optional
-              tier-based      security, custom;      auto for tier A)                deploy step)
-              model ladder)   a different model
-                              than the builder)
-        ^                          |
-        +---- redo (max rounds) ---+        anything stuck --> needs-you (you decide)
+   |
+   v
+ spec --> build --> review --> approve --> pr --> owner approves --> merged --> deployed
+          (own      (code, ui,   (approver     (PR     (/approve or     (optional
+          worktree, ponytail,    agent)        opened)  dashboard)       deploy step)
+          model     security,
+          ladder)   custom;
+                    a different
+                    model than
+                    the builder)
+
+ tier with approval "auto":  pr --> merged (when CI is green)
+ "redo" loops back to build (up to limits.rounds); stuck jobs go to needs-you
 ```
 
-Each issue is sorted into a risk tier first. The tier decides which reviews run and who must approve. A tier can also limit which paths a change may touch.
+Each issue is sorted into a risk tier first. The tier decides which reviews run and who must approve. A tier with `approval: "auto"` merges itself once CI is green; other tiers wait for your approval. A tier can also limit which paths a change may touch.
 
 ## Install
 
@@ -52,7 +56,7 @@ Required:
 
 Optional:
 
-- `codex`, `gemini` or `agy` CLIs, for reviews and builds by other vendors
+- `codex` or `gemini` CLIs, for reviews and builds by other vendors. `agy` (Antigravity CLI, Gemini models) is an option used by the Clareia example only
 - Ollama, for local triage
 - Playwright with Chromium, for UI screenshots and the `ui` review
 
@@ -65,7 +69,7 @@ Vendors are off until you enable them in `.forja/config.json`. Forja works with 
 - **Protected paths.** `.forja/**`, `.github/workflows/**` and `.claude/**` cannot be edited by the builder. Any diff that touches them needs owner approval, whatever its tier.
 - **Your working copy is never touched.** Forja works only in its own worktrees, `<worktreeRoot>/forja-main` and `<worktreeRoot>/forja-<issue>`.
 - **Merged config only.** Forja reads `.forja/config.json` and agent overrides from the merged `forja-main` worktree. A change takes effect after you merge it, never from an open branch.
-- **Privacy rules are enforced twice.** `privacy.denyRead` blocks agents from reading files such as `.env`, and `privacy.promptRules` are added to every agent prompt as hard rules.
+- **Privacy rules.** `privacy.denyRead` is enforced for Claude agents as a read-deny rule. External vendors cannot be restricted that way, so the same patterns are stated in their prompts. `privacy.promptRules` are added to every agent prompt as hard rules.
 - **Review by a different model.** Reviews prefer a different vendor from the builder, so one model does not grade its own work.
 
 ## Customization
@@ -74,6 +78,8 @@ Everything project-specific lives in `.forja/config.json`: repository, approvers
 
 - [`examples/minimal.config.json`](examples/minimal.config.json): repository and approvers only. Everything else comes from the defaults.
 - [`examples/clareia.config.json`](examples/clareia.config.json): a full real-world setup with three tiers, custom checks, a custom data reviewer and privacy rules.
+
+The Clareia example is a real-world config, not a template. It expects `.forja/agents/review-data.md` in the repo, and it uses `{project}` in check commands for data kept outside git (the `data/private` folders are never in a worktree).
 
 The skill that documents every key, with examples for tiers, chains, reviewers, overrides and checks, is [`skills/forja/SKILL.md`](skills/forja/SKILL.md).
 
