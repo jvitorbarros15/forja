@@ -222,7 +222,10 @@ export async function serve(cfg, o = {}) {
     let size = 0; const chunks = [];
     req.on('data', c => {
       size += c.length;
-      if (size > max) { json(res, 413, { error: L('server.tooBig') }); req.destroy(); } else chunks.push(c);
+      if (size <= max) return chunks.push(c);
+      // The answer goes out first and the rest is discarded up to a limit: destroying at once can reset the connection before the client reads the 413.
+      if (!res.headersSent) { res.setHeader('connection', 'close'); json(res, 413, { error: L('server.tooBig') }); }
+      if (size > max * 16) req.destroy();
     });
     req.on('end', async () => {
       if (size > max) return;

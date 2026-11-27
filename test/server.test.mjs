@@ -20,9 +20,9 @@ function mkEnv(config = {}) {
   return { project, cfg, P: paths(cfg) };
 }
 
-const call = (port, method, path, { body, headers = {} } = {}) => new Promise((ok, no) => {
+const call = (port, method, path, { body, headers = {}, host = '127.0.0.1' } = {}) => new Promise((ok, no) => {
   const data = body === undefined ? null : JSON.stringify(body);
-  const r = http.request({ host: '127.0.0.1', port, method, path, headers: { ...(data ? { 'content-type': 'application/json' } : {}), ...headers } }, res => {
+  const r = http.request({ host, port, method, path, headers: { ...(data ? { 'content-type': 'application/json' } : {}), ...headers } }, res => {
     let text = '';
     res.on('data', c => { text += c; });
     res.on('end', () => ok({ status: res.statusCode, text, json: () => JSON.parse(text) }));
@@ -139,4 +139,50 @@ test('issues, queue and triage go through the injected gh and triage', async () 
     assert.ok(calls.some(a => a[1] === 'create' && a.includes('--label') && a.includes('forja')));
     assert.equal((await call(s.port, 'POST', '/api/issues', { body: { title: 'short', body: '', intake: true }, headers: og })).status, 400);
   });
+});
+
+test('every POST route refuses a foreign origin before touching gh or state', async () => {
+  const calls = [];
+  await withServer({}, { gh: async a => { calls.push(a); return '[]'; }, triage: async () => ({ tier: 'A' }) }, async (s, E) => {
+    const headers = { origin: 'http://evil.example' };
+    const bodies = { '/api/queue': { number: 7, action: 'add' }, '/api/issues': { title: 'Add dark mode', body: '', intake: true }, '/api/triage': { title: 'Add dark mode' }, '/api/commands': { jobId: '5', action: 'approve' } };
+    for (const [path, body] of Object.entries(bodies)) assert.equal((await call(s.port, 'POST', path, { body, headers })).status, 403, path);
+    assert.equal((await call(s.port, 'POST', '/api/queue', { body: bodies['/api/queue'], headers: { 'sec-fetch-site': 'cross-site' } })).status, 403);
+    assert.deepEqual(calls, []);
+    assert.equal(existsSync(E.P.queue), false);
+    assert.equal(existsSync(E.P.commands), false);
+  });
+});
+
+test('post body over the cap is refused with 413', async () => {
+  await withServer({}, {}, async (s, E) => {
+    const headers = { origin: `http://127.0.0.1:${s.port}` };
+    const big = await call(s.port, 'POST', '/api/commands', { body: { jobId: '5', action: 'redo', note: 'x'.repeat(5000) }, headers });
+    assert.equal(big.status, 413);
+    assert.equal(existsSync(E.P.commands), false);
+    const bigQueue = await call(s.port, 'POST', '/api/queue', { body: { number: 1, action: 'add', pad: 'x'.repeat(5000) }, headers });
+    assert.equal(bigQueue.status, 413);
+    assert.equal((await call(s.port, 'POST', '/api/commands', { body: { jobId: '5', action: 'redo', note: 'ok' }, headers })).status, 201);
+  });
+});
+
+test('a non-local host requires the token', async t => {
+  const E = mkEnv();
+  let s;
+  try { s = await serve(E.cfg, { port: 0, host: '127.0.0.2' }); } catch (e) { if (e.code === 'EADDRNOTAVAIL') return t.skip('127.0.0.2 is not available here'); throw e; }
+  try {
+    const at = (path, o = {}) => call(s.port, o.method ?? 'GET', path, { host: '127.0.0.2', ...o });
+    assert.match(s.token, /^[0-9a-f]{48}$/);
+    assert.equal(readFileSync(`${E.cfg.paths.state}/.server-token`, 'utf8').trim(), s.token);
+    assert.equal((await at('/api/jobs')).status, 401);
+    assert.equal((await at('/api/jobs?t=wrong')).status, 401);
+    assert.equal((await at('/api/jobs', { headers: { 'x-forja-token': 'wrong' } })).status, 401);
+    assert.equal((await at('/api/events')).status, 401);
+    assert.equal((await at(`/api/jobs?t=${s.token}`)).status, 200);
+    assert.equal((await at('/api/jobs', { headers: { 'x-forja-token': s.token } })).status, 200);
+    const body = { jobId: '5', action: 'approve' };
+    assert.equal((await at('/api/commands', { method: 'POST', body })).status, 401);
+    assert.equal((await at('/api/commands', { method: 'POST', body, headers: { 'x-forja-token': s.token, origin: 'http://evil.example' } })).status, 403);
+    assert.equal((await at('/api/commands', { method: 'POST', body, headers: { 'x-forja-token': s.token, origin: `http://127.0.0.2:${s.port}` } })).status, 201);
+  } finally { await s.close(); }
 });

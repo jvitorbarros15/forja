@@ -29,6 +29,16 @@ export function killTree(pid) {
   } catch {}
 }
 
+// Kills one process and leaves its children running; taskkill /T and a group kill would take them along.
+export function killOne(pid) {
+  pid = Number(pid);
+  if (!(pid > 1)) return;
+  try {
+    if (IS_WIN) spawnSync('taskkill', ['/pid', String(pid), '/F'], { stdio: 'ignore', windowsHide: true });
+    else process.kill(pid, 'SIGKILL');
+  } catch {}
+}
+
 export function spawnDetached(cmd, args, { cwd, env, logFile } = {}) {
   const fd = logFile ? openSync(logFile, 'a') : 'ignore';
   try {

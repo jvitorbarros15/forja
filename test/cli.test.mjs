@@ -1,12 +1,12 @@
 // The forja CLI: gh is injected and PATH is stubbed with fake binaries; start/stop run a real server and a stand-in runner.
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, resolve } from 'node:path';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { run } from '../engine/cli.mjs';
-import { alive, spawnDetached } from '../engine/platform.mjs';
+import { alive, killTree, spawnDetached } from '../engine/platform.mjs';
 import { readJson } from '../engine/state.mjs';
 
 const REPO = resolve(import.meta.dirname, '..').replaceAll('\\', '/');
@@ -32,6 +32,23 @@ function mkProject(config = CONFIG) {
   else mkdirSync(project, { recursive: true });
   return { root, project };
 }
+
+function mkRepo() {
+  const root = tmp(), origin = `${root}/origin.git`, project = `${root}/proj`;
+  execFileSync('git', ['init', '-q', '--bare', '-b', 'main', origin]);
+  put(`${project}/README.md`, 'a\n');
+  g(project, 'init', '-q', '-b', 'main');
+  g(project, 'add', '-A');
+  g(project, 'commit', '-qm', 'Add base');
+  g(project, 'remote', 'add', 'origin', origin);
+  g(project, 'push', '-q', '-u', 'origin', 'main');
+  put(`${project}/.forja/config.json`, { ...CONFIG, server: { port: 43100 + Math.floor(Math.random() * 800), host: '127.0.0.1' } });
+  return { root, project };
+}
+
+const idle = ['-e', 'setInterval(() => {}, 1e3)'];
+const serverOrIdle = (ctx, argv) => spawnDetached(process.execPath, argv[0].endsWith('server.mjs') ? argv : idle, { cwd: ctx.cfg.paths.project });
+const gone = (p, ms = 3000) => new Promise(async r => { for (let i = 0; i < ms / 100 && alive(p.pid, p.startedAt, 'node'); i++) await new Promise(x => setTimeout(x, 100)); r(!alive(p.pid, p.startedAt, 'node')); });
 
 function harness(extra = {}) {
   const logs = [], errs = [], ghCalls = [];
@@ -134,15 +151,7 @@ test('detect works on a bare folder', async () => {
 });
 
 test('start launches server and runner, status reads them, stop kills only them', async () => {
-  const root = tmp(), origin = `${root}/origin.git`, project = `${root}/proj`;
-  execFileSync('git', ['init', '-q', '--bare', '-b', 'main', origin]);
-  put(`${project}/README.md`, 'a\n');
-  g(project, 'init', '-q', '-b', 'main');
-  g(project, 'add', '-A');
-  g(project, 'commit', '-qm', 'Add base');
-  g(project, 'remote', 'add', 'origin', origin);
-  g(project, 'push', '-q', '-u', 'origin', 'main');
-  put(`${project}/.forja/config.json`, { ...CONFIG, server: { port: 43100 + Math.floor(Math.random() * 800), host: '127.0.0.1' } });
+  const { root, project } = mkRepo();
   const launched = [], H = harness();
   H.o.launch = (ctx, argv) => {
     launched.push(argv);
@@ -206,4 +215,77 @@ test('unknown command prints usage', async () => {
   const H = harness();
   assert.equal(await run(['nope', '--project', REPO], H.o), 2);
   assert.match(H.text(), /usage/);
+});
+
+test('stop kills the runner and its launcher but leaves the agents it started', async () => {
+  const { root, project } = mkRepo(), H = harness(), state = `${project}/.forja/state`, childFile = `${root}/child.pid`;
+  const script = `const fs=require('fs'),{spawn}=require('child_process');fs.writeFileSync(${JSON.stringify(`${state}/.runner.lock`)},String(process.pid));const c=spawn(process.execPath,['-e','setInterval(()=>{},1e3)'],{detached:true,stdio:'ignore',windowsHide:true});fs.writeFileSync(${JSON.stringify(childFile)},String(c.pid));c.unref();setInterval(()=>{},1e3)`;
+  H.o.launch = (ctx, argv) => {
+    if (argv[0].endsWith('server.mjs')) return serverOrIdle(ctx, argv);
+    const c = spawn(process.execPath, [`${REPO}/engine/runner.mjs`, '--launch', '-e', script], { detached: true, stdio: 'ignore', windowsHide: true });
+    c.unref();
+    return c;
+  };
+  let child;
+  try {
+    assert.equal(await run(['start', '--project', project], H.o), 0, H.text());
+    for (let i = 0; i < 100 && !existsSync(childFile); i++) await new Promise(r => setTimeout(r, 50));
+    child = { pid: Number(readFileSync(childFile, 'utf8')), startedAt: new Date(Date.now() - 5000).toISOString() };
+    const pids = readJson(`${state}/pids.json`), realPid = Number(readFileSync(`${state}/.runner.lock`, 'utf8'));
+    assert.notEqual(realPid, pids.runner.pid);
+    assert.equal(await run(['stop', '--project', project], harness().o), 0);
+    assert.equal(await gone(pids.runner), true);
+    assert.equal(await gone({ pid: realPid, startedAt: pids.runner.startedAt }), true);
+    assert.equal(alive(child.pid, child.startedAt, 'node'), true);
+    assert.equal(existsSync(`${state}/.runner.lock`), false);
+  } finally {
+    if (child) killTree(child.pid);
+    await run(['stop', '--project', project], harness().o);
+    try { rmSync(root, { recursive: true, force: true }); } catch {}
+  }
+});
+
+test('start restarts only the process that is down', async () => {
+  const { root, project } = mkRepo(), H = harness(), state = `${project}/.forja/state`, launched = [];
+  H.o.launch = (ctx, argv) => { launched.push(argv[0]); return serverOrIdle(ctx, argv); };
+  try {
+    assert.equal(await run(['start', '--project', project], H.o), 0, H.text());
+    const before = readJson(`${state}/pids.json`);
+    killTree(before.server.pid);
+    assert.equal(await gone(before.server), true);
+    assert.equal(await run(['start', '--project', project], harness({ launch: H.o.launch }).o), 0);
+    const after = readJson(`${state}/pids.json`);
+    assert.deepEqual(launched.map(f => f.replaceAll('\\', '/').split('/').pop()), ['server.mjs', 'runner.mjs', 'server.mjs']);
+    assert.deepEqual(after.runner, before.runner);
+    assert.notEqual(after.server.pid, before.server.pid);
+    assert.equal(alive(after.runner.pid, after.runner.startedAt, 'node'), true);
+  } finally {
+    await run(['stop', '--project', project], harness().o);
+    try { rmSync(root, { recursive: true, force: true }); } catch {}
+  }
+});
+
+test('start cleans up what it launched when the server never comes up', async () => {
+  const { root, project } = mkRepo(), H = harness({ startWaitMs: 300 }), state = `${project}/.forja/state`, spawned = [];
+  H.o.launch = (ctx, argv) => {
+    const c = spawnDetached(process.execPath, argv[0].endsWith('server.mjs') ? ['-e', '0'] : idle, { cwd: ctx.cfg.paths.project });
+    spawned.push({ pid: c.pid, startedAt: new Date().toISOString() });
+    return c;
+  };
+  try {
+    assert.equal(await run(['start', '--project', project], H.o), 1);
+    assert.match(H.text(), /did not start/);
+    assert.equal(existsSync(`${state}/pids.json`), false);
+    assert.equal(await gone(spawned[1]), true);
+  } finally {
+    for (const p of spawned) killTree(p.pid);
+    try { rmSync(root, { recursive: true, force: true }); } catch {}
+  }
+});
+
+test('init merges the answers onto an existing config', async () => {
+  const { project } = mkProject({ ...CONFIG, language: 'pt-BR', limits: { rounds: 5 }, models: { spec: ['claude:opus'] } }), H = harness();
+  const answers = { repo: 'o/r', approvers: ['Owner', 'Two'], language: 'en', checks: { test: 'npm test' } };
+  assert.equal(await run(['init', '--project', project, '--answers', JSON.stringify(answers), '--no-gh'], H.o), 0);
+  assert.deepEqual(readJson(`${project}/.forja/config.json`), { repo: 'o/r', approvers: ['Owner', 'Two'], checks: { test: 'npm test' }, limits: { rounds: 5 }, models: { spec: ['claude:opus'] } });
 });

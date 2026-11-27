@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ConfigError, DEFAULTS, loadConfig } from './config.mjs';
 import { t } from './i18n.mjs';
-import { IS_WIN, alive, killTree } from './platform.mjs';
+import { IS_WIN, alive, killOne, killTree } from './platform.mjs';
 import { renderAgent, roles } from './registry.mjs';
 import { launch as realLaunch, loadCfg } from './runner.mjs';
 import { dashboardUrl } from './server.mjs';
@@ -83,18 +83,32 @@ function fromAnswers(a) {
     cfg.vendors = Object.fromEntries(Object.entries(list).map(([n, v]) => [n, typeof v === 'boolean' ? { enabled: v } : v]));
   }
   for (const k of ['deployTest', 'deploy']) if (a[k]) cfg.checks = { ...cfg.checks, [k]: a[k] };
-  const min = { repo: cfg.repo, approvers: cfg.approvers };
-  for (const k of Object.keys(cfg)) if (!(k in min)) { const v = diff(cfg[k], DEFAULTS[k]); if (v !== undefined) min[k] = v; }
-  return { min };
+  return { cfg };
 }
+
+const merge = (base, over) => {
+  if (!isObj(base) || !isObj(over)) return over === undefined ? base : over;
+  const out = { ...base };
+  for (const k of Object.keys(over)) out[k] = merge(base[k], over[k]);
+  return out;
+};
+
+const minimal = full => {
+  const min = { repo: full.repo, approvers: full.approvers };
+  for (const k of Object.keys(full)) if (!(k in min)) { const v = diff(full[k], DEFAULTS[k]); if (v !== undefined) min[k] = v; }
+  return min;
+};
 
 function init(project, args, o, L, out) {
   const val = k => (args.includes(k) ? args[args.indexOf(k) + 1] : undefined);
   let answers;
   try { answers = JSON.parse(val('--answers-file') ? readFileSync(val('--answers-file'), 'utf8').replace(/^﻿/, '') : val('--answers')); } catch (e) { out.err(L('cli.answersBad', { why: first(e) })); return 2; }
   if (!isObj(answers)) { out.err(L('cli.answersBad', { why: 'not an object' })); return 2; }
-  const { min, bad } = fromAnswers(answers);
+  const { cfg: given, bad } = fromAnswers(answers);
   if (bad) { out.err(bad.map(k => L('cli.answersUnknown', { key: k })).join('\n')); return 2; }
+  let existing = {};
+  try { if (existsSync(`${project}/.forja/config.json`)) existing = JSON.parse(readFileSync(`${project}/.forja/config.json`, 'utf8')); } catch (e) { out.err(L('cli.answersBad', { why: first(e) })); return 2; }
+  const min = minimal(merge(isObj(existing) ? existing : {}, given));
 
   const tmp = mkdtempSync(`${os.tmpdir()}/forja-init-`);
   let cfg;
@@ -131,34 +145,69 @@ const pidsFile = cfg => `${cfg.paths.state}/pids.json`;
 const running = p => !!p && alive(p.pid, p.startedAt, 'node');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+const kill = { server: killTree, runner: killOne };
+
+// The recorded pid is the launcher on Windows, so the runner's own pid comes from its lock and heartbeat. Each pid is
+// identity-checked first. The runner is killed alone: killing its tree would take the agents it started along.
+function pidsOf(cfg, name, pids) {
+  const state = cfg.paths.state, out = [], lock = `${state}/.runner.lock`;
+  const add = (pid, startedAt) => { if (pid && !out.some(p => p.pid === Number(pid)) && alive(pid, startedAt, 'node')) out.push({ pid: Number(pid), startedAt }); };
+  const mine = pids?.[name];
+  if (mine) add(mine.pid, mine.startedAt);
+  if (name === 'server') {
+    const s = readJson(`${state}/server.json`, null);
+    if (s) add(s.pid, s.startedAt);
+  } else {
+    const hb = readJson(`${state}/runner.json`, null);
+    if (hb && Date.now() - Date.parse(hb.at) < 30 * 60e3) add(hb.pid, hb.at);
+    if (existsSync(lock)) add(Number(read(lock).trim()), statSync(lock).mtimeMs);
+  }
+  return out;
+}
+
+function stopNames(cfg, names, L, log) {
+  const state = cfg.paths.state, pids = readJson(pidsFile(cfg), null), lock = `${state}/.runner.lock`;
+  const lockPid = existsSync(lock) ? Number(read(lock).trim()) : 0, lockAt = existsSync(lock) ? statSync(lock).mtimeMs : 0;
+  let lockKilled = false;
+  for (const name of names) {
+    const found = pidsOf(cfg, name, pids);
+    for (const p of found) {
+      kill[name](p.pid);
+      if (p.pid === lockPid) lockKilled = true;
+      log(L('cli.stopped', { name, pid: p.pid }));
+    }
+    if (!found.length) log(L('cli.notRunning', { name }));
+    if (name === 'server') rmSync(`${state}/server.json`, { force: true });
+  }
+  if (names.includes('runner') && (lockKilled || !alive(lockPid, lockAt, 'node'))) rmSync(lock, { force: true });
+  const left = Object.fromEntries(Object.entries(pids ?? {}).filter(([n]) => !names.includes(n)));
+  if (Object.keys(left).length) writeJson(pidsFile(cfg), left); else rmSync(pidsFile(cfg), { force: true });
+}
+
 async function start(cfg, o, L, out) {
   const state = cfg.paths.state, pids = readJson(pidsFile(cfg), null), url = () => dashboardUrl(state);
-  if (running(pids?.server) && running(pids?.runner)) {
+  const need = ['server', 'runner'].filter(n => !running(pids?.[n]));
+  if (!need.length) {
     out.log(L('cli.alreadyRunning'));
     if (url()) out.log(L('cli.dashboard', { url: url() }));
     return 0;
   }
-  stopPids(cfg, pids, L, () => {});
   try { ensureMain(cfg); } catch (e) { out.err(L('cli.startFailed', { why: first(e.stderr || e) })); return 1; }
-  rmSync(`${state}/server.json`, { force: true });
-  const launch = o.launch ?? realLaunch, ctx = { cfg, once: false }, at = () => new Date().toISOString();
-  const proj = cfg.paths.project, s = launch(ctx, [SERVER, '--project', proj]), sAt = at(), r = launch(ctx, [RUNNER, '--project', proj, '--every', '15']), rAt = at();
-  if (!s?.pid || !r?.pid) { out.err(L('cli.startFailed', { why: 'spawn' })); return 1; }
-  writeJson(pidsFile(cfg), { server: { pid: s.pid, startedAt: sAt }, runner: { pid: r.pid, startedAt: rAt } });
-  for (let i = 0; i < 50 && !url(); i++) await sleep(100);
-  if (!url()) { out.err(L('cli.serverSilent', { log: `${state}/logs/server.log` })); return 1; }
+  stopNames(cfg, need, L, () => {});
+  const launch = o.launch ?? realLaunch, ctx = { cfg, once: false }, proj = cfg.paths.project;
+  const argv = { server: [SERVER, '--project', proj], runner: [RUNNER, '--project', proj, '--every', '15'] };
+  const launched = [];
+  for (const name of need) {
+    const c = launch(ctx, argv[name]);
+    if (!c?.pid) { stopNames(cfg, launched, L, () => {}); out.err(L('cli.startFailed', { why: 'spawn' })); return 1; }
+    launched.push(name);
+    writeJson(pidsFile(cfg), { ...readJson(pidsFile(cfg), {}), [name]: { pid: c.pid, startedAt: new Date().toISOString() } });
+  }
+  for (let i = 0; i < (o.startWaitMs ?? 5000) / 100 && !url(); i++) await sleep(100);
+  if (!url()) { stopNames(cfg, launched, L, () => {}); out.err(L('cli.serverSilent', { log: `${state}/logs/server.log` })); return 1; }
   out.log(L('cli.started'));
   out.log(L('cli.dashboard', { url: url() }));
   return 0;
-}
-
-function stopPids(cfg, pids, L, log) {
-  const state = cfg.paths.state;
-  for (const name of ['server', 'runner']) {
-    const p = pids?.[name];
-    if (running(p)) { killTree(p.pid); log(L('cli.stopped', { name, pid: p.pid })); } else log(L('cli.notRunning', { name }));
-  }
-  for (const f of ['pids.json', 'server.json', '.runner.lock']) rmSync(`${state}/${f}`, { force: true });
 }
 
 const age = ms => (ms < 90e3 ? `${Math.round(ms / 1e3)}s` : ms < 90 * 60e3 ? `${Math.round(ms / 60e3)}m` : `${Math.round(ms / 3600e3)}h`);
@@ -251,7 +300,7 @@ export async function run(argv, o = {}) {
   try { cfg = loadCfg(project); } catch (e) { out.err(`${L('cli.doctor.configBad')}\n${e instanceof ConfigError ? e.errors.join('\n') : first(e)}`); return 1; }
   if (cmd === 'start') return start(cfg, o, L, out);
   if (cmd === 'status') return status(cfg, L, out);
-  stopPids(cfg, readJson(pidsFile(cfg), null), L, out.log);
+  stopNames(cfg, ['server', 'runner'], L, out.log);
   return 0;
 }
 

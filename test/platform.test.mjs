@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { IS_WIN, alive, killTree, spawnDetached, linkDir, notify } from '../engine/platform.mjs';
+import { IS_WIN, alive, killOne, killTree, spawnDetached, linkDir, notify } from '../engine/platform.mjs';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'forja-plat-'));
 
@@ -81,4 +81,23 @@ test('notify writes log line when desktop is false', () => {
   assert.ok(existsSync(logFile));
   assert.match(readFileSync(logFile, 'utf8'), /^\S+ build done\n$/);
   rmSync(dir, { recursive: true, force: true });
+});
+
+test('killOne stops the process and leaves its child alive', async () => {
+  const dir = tmp(), file = join(dir, 'child.pid');
+  const script = `const { spawn } = require('node:child_process'); const c = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1e3)'], { detached: true, stdio: 'ignore', windowsHide: true }); require('node:fs').writeFileSync(${JSON.stringify(file)}, String(c.pid)); c.unref(); setInterval(() => {}, 1e3);`;
+  const parent = spawnDetached(process.execPath, ['-e', script]);
+  let childPid;
+  try {
+    for (let i = 0; i < 100 && !existsSync(file); i++) await new Promise(r => setTimeout(r, 50));
+    childPid = Number(readFileSync(file, 'utf8'));
+    killOne(parent.pid);
+    await new Promise(r => setTimeout(r, 300));
+    assert.equal(alive(parent.pid, new Date(Date.now() - 5000).toISOString(), 'node'), false);
+    assert.equal(alive(childPid, new Date(Date.now() - 5000).toISOString(), 'node'), true);
+  } finally { killTree(childPid); killTree(parent.pid); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('killOne ignores invalid pids', () => {
+  for (const pid of [0, null, undefined, NaN, 1, -1, 'x']) killOne(pid);
 });
