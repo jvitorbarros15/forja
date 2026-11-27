@@ -11,7 +11,7 @@ import { t } from './i18n.mjs';
 import { logCall } from './models.mjs';
 import { IS_WIN, alive, gone, killTree, notify as platformNotify, spawnDetached } from './platform.mjs';
 import { roles } from './registry.mjs';
-import { bestEffort, gh as realGh, git, idsOf, locked, paths, read, readCommands, readJson, writeJson } from './state.mjs';
+import { bestEffort, gh as realGh, git, idsOf, locked, paths, pruneCommands, read, readCommands, readJson, writeJson } from './state.mjs';
 import { createTick } from './tick.mjs';
 import { runAgent } from './vendors/claude.mjs';
 import { cleanMain, ensureMain } from './worktree.mjs';
@@ -124,16 +124,19 @@ export function startAgent(ctx, issue, a) {
 // agent still holding its slot. An answer for a round the job already left is dropped.
 export async function agentMain(ctx, file) {
   const { cfg, T, ROLES, log, L } = ctx, a = readJson(file, null), issue = a.issue, role = ROLES[a.agent], slot = role.slot;
+  const wtState = () => { try { return role.reviewer && a.cwd ? git(a.cwd, 'status', '--porcelain') + git(a.cwd, 'rev-parse', 'HEAD') : null; } catch { return null; } };
+  const before = wtState();
   // A launch that throws (no agent file, no claude) is reported like an agent that answered nothing, so it spends a retry.
   const r = await Promise.resolve().then(() => runAgent(cfg, role, a, cpid => T.upsertWorker(issue, { id: a.id, cpid }))).catch(e => ({ code: -1, out: '', err: String(e.message) }));
   let j = null; try { j = JSON.parse(r.out); } catch {}
-  const ok = r.code === 0 && !!j && !j.is_error, endedAt = new Date().toISOString();
+  const changed = before !== null && wtState() !== before;
+  const ok = !changed && r.code === 0 && !!j && !j.is_error, endedAt = new Date().toISOString();
   const done = { status: ok ? 'ok' : 'failed', endedAt, durationMs: j?.duration_ms ?? Date.parse(endedAt) - Date.parse(a.startedAt), tokens: tokensOf(j?.usage), estimated: false };
   let e = null;
   const record = () => T.setJob(issue, job => {
     const workers = (job.workers ?? []).map(w => (w.id === a.id ? { ...w, ...done } : w));
     if (job.round !== a.round || !(job.running ?? []).includes(slot)) return { workers };
-    e = T.agentEnd(job, a, ok, j?.result ?? r.err);
+    e = T.agentEnd(job, a, ok, changed ? L('err.reviewChanged', { entry: `claude:${a.model}`, kind: slot }) : (j?.result ?? r.err));
     // Logged before the slot is freed, so the next tick already knows Claude is at its limit.
     if (e.limited) bestEffort(() => logCall(cfg.paths.state, 'claude', issue, slot, true, e.limited), 1);
     if (e.write) { mkdirSync(dirname(a.out), { recursive: true }); writeFileSync(a.out, e.write); }
@@ -158,7 +161,7 @@ function editCommands(ctx, fn) {
     const list = readCommands(file);
     let hit = false;
     for (const c of list) if (fn(c, c.id)) hit = true;
-    if (hit) writeJson(file, list);
+    if (hit) writeJson(file, pruneCommands(list));
   });
 }
 
@@ -172,9 +175,14 @@ export function execStep(ctx, s) {
     for (const d of s.do ?? []) {
       if (d.run) {
         const r = spawnSync(d.run[0], d.run.slice(1), { cwd: cfg.paths.project, encoding: 'utf8', maxBuffer: 256e6, timeout: 45 * MIN, windowsHide: true });
-        if (r.status !== 0) throw new Error(`${label(d.run)}: ${brief(r.stderr || r.stdout || r.error?.message || `exit ${r.status}`)}`);
-        if (d.sets) set[d.sets] = /^\d+$/.test(r.stdout.trim()) ? Number(r.stdout.trim()) : r.stdout.trim();
-        log(`run ok: ${label(d.run)}`);
+        if (r.status !== 0) {
+          const msg = `${label(d.run)}: ${brief(r.stderr || r.stdout || r.error?.message || `exit ${r.status}`)}`;
+          if (!d.optional) throw new Error(msg);
+          log(`run ignored: ${msg}`);
+        } else {
+          if (d.sets) set[d.sets] = /^\d+$/.test(r.stdout.trim()) ? Number(r.stdout.trim()) : r.stdout.trim();
+          log(`run ok: ${label(d.run)}`);
+        }
       } else if (d.bg) {
         if (d.bg[0] !== process.execPath) throw new Error(`bg is not a node command: ${label(d.bg)}`);
         const k = d.bg.indexOf('--project') + 2, triage = d.bg[k] === 'triage' && /^\d+$/.test(d.bg[k + 1]) ? d.bg[k + 1] : null;
@@ -254,7 +262,7 @@ export function reapDead(ctx) {
       const p = `${P.docs}/${id}.json`;
       if (!/^\d+$/.test(id) && existsSync(p)) {
         const d = readJson(p, {});
-        d.events = [...(d.events ?? []), { at: endedAt, text }];
+        d.events = [...(d.events ?? []), { at: endedAt, text }].slice(-200);
         d.workers = (d.workers ?? []).map(w => (w.status === 'running' && w.round === 99 && Date.parse(w.startedAt) >= started ? { ...w, status: 'failed', endedAt } : w));
         writeJson(p, d);
       }

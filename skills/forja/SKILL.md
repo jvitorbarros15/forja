@@ -52,7 +52,7 @@ Chains are ordered lists of `vendor:model`. The first usable entry wins. Other v
     "build": { "exact": ["local:exact"], "small": ["claude:haiku"], "medium": ["claude:sonnet"], "hard": ["claude:opus"] },
     "buildEscalation": ["exact", "small", "medium", "hard"],
     "review": { "code": ["claude:sonnet"], "ui": ["claude:sonnet"], "ponytail": ["claude:sonnet"], "security": ["claude:opus"] },
-    "goldfish": ["claude:sonnet"],
+    "goldfish": ["codex:sol"],
     "approver": ["claude:sonnet"],
     "approverStrong": ["claude:opus"],
     "advisor": ["claude:sonnet"]
@@ -62,6 +62,7 @@ Chains are ordered lists of `vendor:model`. The first usable entry wins. Other v
 
 - `build` is a ladder. A failed build escalates one rung through `buildEscalation`.
 - Reviews prefer a different vendor from the builder. With Claude only, a review uses a different model from the builder, or the builder's model in a fresh context when the chain runs out.
+- `goldfish` runs only with a non-Claude entry (an enabled external vendor such as `codex` or `gemini`). Without one, including in the default Claude-only config, the blind check is skipped.
 - `spec`, `specStrong`, `approver`, `approverStrong` and `advisor` must use `claude:` entries because they run as Claude agents.
 
 ## Vendors
@@ -176,7 +177,7 @@ A diff that touches `ui.paths` counts as a UI change. Forja starts `ui.serve` it
 - `intakeLabel`: the label that starts a job. Default `forja`.
 - `queue.max`: how many open issues the queue feeder keeps labeled at once (issues listed in `queue.json`). It does not limit issues you label by hand. Default `3`.
 - `limits.rounds`: review rounds before a job goes to `needs-you`. Default `3`.
-- `goldfish`: boolean switch (default `true`) for a check where a model that sees only the spec and the repo tries to break it. Its model chain is `models.goldfish`. It runs only on tiers above the lowest, and never on the spec's own model.
+- `goldfish`: boolean switch (default `true`) for a check where an external model that sees only the spec and the repo tries to break it. Its model chain is `models.goldfish`, which needs an enabled non-Claude vendor entry (such as `codex` or `gemini`); without one (including in the default Claude-only config), the blind check is skipped. It runs only on tiers above the lowest.
 - `notify.desktop`: desktop notifications when a job needs the owner.
 
 ## Workflow after a change

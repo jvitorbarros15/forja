@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { strings, t } from './i18n.mjs';
 import { aliveAsync } from './platform.mjs';
 import { loadProjectConfig } from './config.mjs';
-import { idsOf, locked, paths, read, readJson, writeJson } from './state.mjs';
+import { idsOf, locked, paths, pruneCommands, read, readJson, writeJson } from './state.mjs';
 import { ID_RE } from './tick.mjs';
 import { chat } from './triage.mjs';
 
@@ -59,7 +59,7 @@ export async function serve(cfg, o = {}) {
   }
 
   const jobs = () => readdirSync(P.docs).filter(f => f.endsWith('.json')).map(f => rj(`${P.docs}/${f}`, null)).filter(Boolean);
-  const commands = () => { const c = rj(P.commands, []); return Array.isArray(c) ? c : []; };
+  const commands = () => { const c = rj(P.commands, []); return Array.isArray(c) ? pruneCommands(c) : []; };
   let aliveCache = null, alivePending = null;
   async function runner() {
     const r = rj(P.runner, null);
@@ -100,7 +100,7 @@ export async function serve(cfg, o = {}) {
       let ms = Date.now(), id = `local-${ms}`;
       while (all.some(c => c.id === id)) id = `local-${++ms}`;
       all.push({ id, jobId, action, note, status: 'pending', at: new Date(ms).toISOString() });
-      writeJson(P.commands, all);
+      writeJson(P.commands, pruneCommands(all, ms));
       return [201, { id }];
     });
   }

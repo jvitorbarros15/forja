@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { t } from './i18n.mjs';
 import { parseEntry } from './models.mjs';
-import { bestEffort, gh as realGh, field, git, locked, paths, read, readCommands, readJson, writeJson } from './state.mjs';
+import { bestEffort, gh as realGh, field, git, locked, paths, pruneCommands, read, readCommands, readJson, writeJson } from './state.mjs';
 import { createTick } from './tick.mjs';
 import { tail } from './vendors/proc.mjs';
 import { ensureMain, expand, removeJob, sh } from './worktree.mjs';
@@ -76,7 +76,7 @@ export async function runDeploy(cfg, test, ids, { gh = realGh, T = createTick(cf
   const P = paths(cfg), L = (k, v) => t(cfg.language, k, v), cmd = test ? 'deploy-test' : 'deploy', num = id => /^\d+$/.test(id);
   if (!cfg.checks[test ? 'deployTest' : 'deploy']) throw new Error(L('refuse.noDeployCommand'));
   const doc = id => `${P.docs}/${id}.json`, edit = (id, fn) => { if (existsSync(doc(id))) { const d = readJson(doc(id)); fn(d); writeJson(doc(id), d); } };
-  const note = (id, text, at) => (num(id) ? T.setJob(Number(id), {}, text, false) : edit(id, d => { d.events = [...(d.events ?? []), { at, text }]; }));
+  const note = (id, text, at) => (num(id) ? T.setJob(Number(id), {}, text, false) : edit(id, d => { d.events = [...(d.events ?? []), { at, text }].slice(-200); }));
   const startedAt = new Date().toISOString(), w = { id: `${cmd}-${Date.parse(startedAt)}`, model: 'local', vendor: 'local', role: cmd, round: 99, startedAt, tokens: null };
   const worker = (id, patch) => { const x = { ...w, ...patch }; if (num(id)) T.upsertWorker(Number(id), x); else edit(id, d => { d.workers = [...(d.workers ?? []).filter(y => y.id !== x.id), x]; }); };
   // Board writes around the deploy are best effort: a busy lock must neither stop the deploy from starting nor hide that it went live.
@@ -109,7 +109,7 @@ export async function runDeploy(cfg, test, ids, { gh = realGh, T = createTick(cf
     for (const c of list) {
       if (c.action === cmd && c.status === 'running' && ids.includes(String(c.jobId))) { c.status = ok ? 'done' : 'failed'; c.doneAt = r.endedAt; hit = true; }
     }
-    if (hit) writeJson(P.commands, list);
+    if (hit) writeJson(P.commands, pruneCommands(list));
   }));
   return res;
 }

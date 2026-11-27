@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import os from 'node:os';
-import path from 'node:path';
-import { PROTECTED } from './config.mjs';
+import { PROTECTED, reviewerAgentPath } from './config.mjs';
 
 const FM = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
 const fwd = (p) => p.replace(/\\/g, '/');
@@ -34,7 +33,7 @@ export function roles(cfg) {
   const { main, plugin } = cfg.paths;
   const deny = [...DENY, ...cfg.privacy.denyRead.map((g) => `Read(${g})`)];
   const readOnlyDeny = [...deny, 'Edit(./**)', 'Write(./**)'];
-  const builderDeny = [...deny, ...PROTECTED.flatMap((p) => [`Edit(./${p})`, `Write(./${p})`])];
+  const builderDeny = [...deny, ...[...PROTECTED, '.git', '.git/**'].flatMap((p) => [`Edit(./${p})`, `Write(./${p})`])];
   const out = {};
   const add = (name, def, template, extra = []) => {
     const checks = def.checks ?? [];
@@ -50,9 +49,10 @@ export function roles(cfg) {
     const override = `${main}/.forja/agents/${name}.md`;
     add(name, def, fs.existsSync(override) ? override : `${plugin}/agents/${name}.md`);
   }
-  for (const [kind, r] of Object.entries(cfg.reviewers)) {
-    const name = `review-${kind}`;
-    add(name, { slot: kind, out: reviewOut(kind), start: MARKED }, fwd(path.resolve(main, r.agent)), r.allow ?? []);
+  for (const [kind, r] of Object.entries(cfg.reviewers ?? {})) {
+    const name = `review-${kind}`, template = reviewerAgentPath(main, r?.agent, true);
+    if (!template) throw new Error(`reviewers.${kind}.agent must be a relative path inside the repository`);
+    add(name, { slot: kind, out: reviewOut(kind), start: MARKED }, template, r.allow ?? []);
     out[name].skills = [...new Set([...out[name].skills, ...(r.skills ?? [])])];
   }
   return out;

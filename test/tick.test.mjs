@@ -472,6 +472,39 @@ test('a repo with .github/workflows keeps waiting on ci: none past three minutes
   assert.equal(C.T.stepFor(pr(), {}).step, 'merge');
 });
 
+test('with workflows and ci: none for 15 min, the job goes to needs-you and an owner Approve merges without CI', () => {
+  const C = mkEnv(MULTI);
+  reviewed(C, 125);
+  put(`${C.cfg.paths.main}/.github/workflows/push-only.yml`, 'on: push\n');
+  const pr = o => job({ issue: 125, stage: 'pr', pr: 9, prState: 'open', ci: 'none', tier: 'A', reviews: R, stageSince: later(-16 * 60e3), prHeadAt: later(-16 * 60e3), ...o });
+  const asked = C.T.stepFor(pr(), {});
+  assert.equal(asked.step, 'escalate');
+  assert.equal(asked.set.stage, 'needs-you');
+  assert.equal(asked.set.note, t('en', 'need.ciMissing', { pr: 9 }));
+  assert.equal(asked.set.need.action, t('en', 'action.ciMissing'));
+  assert.deepEqual(asked.set.need.buttons, ['approve', 'redo']);
+  assert.equal(asked.set.ciWaited, HEAD);
+
+  const waitingOwner = { ...pr(), ...asked.set };
+  commands(C, [{ jobId: '125', action: 'approve' }]);
+  const [opened] = C.T.commandSteps({ jobs: [waitingOwner] }, {});
+  assert.equal(opened.step, 'open-pr');
+  assert.equal(opened.set.approved, true);
+  // Even after stageSince resets on needs-you -> pr, owner Approve merges without waiting another 15 min.
+  const backInPr = { ...waitingOwner, ...opened.set, stageSince: now() };
+  assert.equal(C.T.stepFor(backInPr, {}).step, 'merge');
+  // A PR /approve comment also merges once 15 min have passed.
+  assert.equal(C.T.stepFor(pr({ prCmd: { cmd: 'approve', note: '' } }), {}).step, 'merge');
+  // A new commit head does not inherit ciWaited.
+  assert.deepEqual(C.T.stepFor({ ...backInPr, prHead: 'd'.repeat(40), prHeadAt: now() }, {}), { wait: 'ci' });
+  // pr.requireCi: true still keeps waiting.
+  const strict = mkEnv({ ...MULTI, pr: { requireCi: true } });
+  reviewed(strict, 125);
+  put(`${strict.cfg.paths.main}/.github/workflows/push-only.yml`, 'on: push\n');
+  assert.deepEqual(strict.T.stepFor(pr(), {}), { wait: 'ci' });
+  assert.deepEqual(strict.T.stepFor(backInPr, {}), { wait: 'ci' });
+});
+
 test('an empty check rollup is recorded as none, and a new head restarts the grace period', () => {
   const C = mkEnv(MULTI);
   reviewed(C, 123);
@@ -930,6 +963,7 @@ test('a worktree nothing will use again is removed: merged without a deploy comm
   const [r] = C.T.commandSteps({ jobs: [job({ issue: 140, round: 0, stage: 'needs-you' })] }, {});
   assert.equal(r.step, 'redo');
   assert.equal(sh(r.do[0]).split(' ').slice(-2).join(' '), 'cleanup 140');
+  assert.equal(r.do[0].optional, true);
   const withDeploy = mkEnv(MULTI);
   mkdirSync(withDeploy.WT(142), { recursive: true });
   assert.notEqual(withDeploy.T.stepFor(job({ issue: 142, stage: 'merged', tier: 'B', stageSince: at }), {})?.step, 'cleanup');

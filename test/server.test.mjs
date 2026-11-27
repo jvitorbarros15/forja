@@ -390,3 +390,25 @@ test('api/runner checks liveness asynchronously, caches within TTL, keeps last v
     assert.equal(calls, 4);
   });
 });
+
+test('commands.json and /api/commands prune old and excess finished commands while keeping active ones', async () => {
+  await withServer({}, {}, async (s, E) => {
+    const old = new Date(Date.now() - 8 * 86400e3).toISOString(), fresh = new Date().toISOString();
+    const seed = [
+      { id: 'p0', jobId: '1', action: 'approve', status: 'pending', at: old },
+      { id: 'r0', jobId: '2', action: 'deploy', status: 'running', at: old },
+      { id: 'stale', jobId: '3', action: 'approve', status: 'done', at: old, doneAt: old },
+      ...Array.from({ length: 205 }, (_, i) => ({ id: `d${i}`, jobId: '4', action: 'approve', status: 'done', at: fresh, doneAt: fresh })),
+    ];
+    put(E.P.commands, seed);
+    const got = (await call(s.port, 'GET', '/api/commands')).json();
+    assert.equal(got.length, 202);
+    assert.deepEqual(got.slice(0, 3).map(c => c.id), ['p0', 'r0', 'd5']);
+    const post = await call(s.port, 'POST', '/api/commands', { body: { jobId: '9', action: 'approve' }, headers: { origin: `http://127.0.0.1:${s.port}` } });
+    assert.equal(post.status, 201);
+    const disk = JSON.parse(readFileSync(E.P.commands, 'utf8'));
+    assert.equal(disk.length, 203);
+    assert.equal(disk.some(c => c.id === 'stale' || c.id === 'd0'), false);
+    assert.ok(disk.some(c => c.id === 'p0') && disk.some(c => c.id === 'r0'));
+  });
+});

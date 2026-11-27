@@ -79,7 +79,7 @@ Optional:
 
 Vendors are off until you enable them in `.forja/config.json`. Forja works with Claude alone.
 
-Model chains are lists like `["claude:sonnet", "codex:sol"]`. The builder, the reviewers and goldfish accept any enabled vendor. The spec, approver and advisor roles must be `claude:*` entries: they run as restricted Claude agents with tool allowlists (they read files and may run only a short list of commands, with no network), and no other vendor's CLI can enforce that.
+Model chains are lists like `["claude:sonnet", "codex:sol"]`. The builder and the reviewers accept any enabled vendor; goldfish requires an enabled non-Claude vendor (it is skipped in a Claude-only setup). The spec, approver and advisor roles must be `claude:*` entries: they run as restricted Claude agents with tool allowlists (they read files and may run only a short list of commands, with no network), and no other vendor's CLI can enforce that.
 
 ## How it works
 
@@ -118,12 +118,12 @@ These are the defaults. Every tier, review and approval rule can be changed in `
 | B | App logic, UI behavior, copy or markup | `code`, `ui` (only when the builder reports UI changes), `ponytail` | owner | standard | none |
 | C | Auth, secrets, payments, migrations or user data, deploy or CI config, or loosening any check | `code`, `ponytail`, `security` | owner | strong | none |
 
-Reviews run in two passes. `code` and `ui` run first. `ponytail` and `security` are deferred reviews and start only after the first pass passes. Goldfish checks the spec of every tier above the first one (B and C by default). Triage can raise a tier, never lower it. Tier C uses the strong spec and approver models (`models.specStrong`, `models.approverStrong`).
+Reviews run in two passes. `code` and `ui` run first. `ponytail` and `security` are deferred reviews and start only after the first pass passes. When an external vendor is configured in `models.goldfish`, goldfish checks the spec of every tier above the first one (B and C by default); in a Claude-only setup it is skipped. Triage can raise a tier, never lower it. Tier C uses the strong spec and approver models (`models.specStrong`, `models.approverStrong`).
 
 ### Named reviewers
 
 - **ponytail** is the code-quality review: is the logic right, is it safe, does it hold under real load, is risky code tested, and is every line needed.
-- **goldfish** is a blind check of the spec before any code is built. A different model sees only the spec and the repo, not the issue thread, and tries to break the spec: missed cases, wrong files, criteria that cannot be checked.
+- **goldfish** is a blind check of the spec before any code is built. An external (non-Claude) model configured in `models.goldfish` sees only the spec and the repo, not the issue thread, and tries to break the spec: missed cases, wrong files, criteria that cannot be checked. Without a non-Claude entry in `models.goldfish` (including the default Claude-only setup), goldfish is skipped.
 
 ## Safety model
 

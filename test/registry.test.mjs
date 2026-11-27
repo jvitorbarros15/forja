@@ -78,13 +78,27 @@ test('unset checks add no Bash rule', () => {
   assert.ok(!r.approver.allow({}).some((a) => a.startsWith('Bash')));
 });
 
-test('builder denies protected paths', () => {
+test('builder denies protected paths and .git', () => {
   const r = roles(mkCfg());
-  for (const p of ['.forja/**', '.github/workflows/**', '.claude/**']) {
-    assert.ok(r.builder.deny.includes(`Edit(./${p})`));
-    assert.ok(r.builder.deny.includes(`Write(./${p})`));
+  for (const p of ['.forja/**', '.github/workflows/**', '.claude/**', '.git', '.git/**']) {
+    assert.ok(r.builder.deny.includes(`Edit(./${p})`), p);
+    assert.ok(r.builder.deny.includes(`Write(./${p})`), p);
   }
   assert.ok(!r['review-code'].deny.includes('Edit(./.forja/**)'));
+});
+
+test('roles rejects custom reviewer agent missing or escaping main', () => {
+  for (const bad of [{}, { agent: '' }, { agent: '../escape.md' }, { agent: 'a/../../escape.md' }, { agent: '/etc/passwd' }, { agent: 'C:/evil.md' }]) {
+    const cfg = mkCfg();
+    cfg.reviewers.data = bad;
+    assert.throws(() => roles(cfg), /reviewers\.data\.agent/, JSON.stringify(bad));
+  }
+  const cfg = mkCfg(), outside = tmp();
+  fs.mkdirSync(cfg.paths.main, { recursive: true });
+  write(`${outside}/evil.md`, 'evil');
+  fs.symlinkSync(outside, `${cfg.paths.main}/link`, 'junction');
+  cfg.reviewers.data = { agent: 'link/evil.md' };
+  assert.throws(() => roles(cfg), /reviewers\.data\.agent/);
 });
 
 test('privacy denyRead becomes Read deny', () => {

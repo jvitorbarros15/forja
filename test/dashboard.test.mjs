@@ -76,6 +76,7 @@ test('dashboard animates only new cards, guards SSE frames and a failed boot, an
   assert.equal(ptBR['ui.tokens'], 'tokens');
   assert.match(html, /t\('ui\.dur\.ms'/);
   assert.doesNotMatch(html, /' ms'/);
+  assert.match(script, /const WORKING=\[[^\]]*'setup'/);
 });
 
 test('dashboard strips ?t= from the URL and sends x-forja-token on fetch calls', () => {

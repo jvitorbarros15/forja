@@ -263,7 +263,8 @@ async function doctor(project, o, L, out) {
   try {
     cfg = loadProjectConfig(project, { fallback: true });
     add('ok', L('cli.doctor.config'));
-    if (!existsSync(`${cfg.paths.main}/.forja/config.json`)) add('warn', L('config.notMerged', { dir: cfg.paths.main }));
+    if (existsSync(cfg.paths.main) && !existsSync(`${cfg.paths.main}/.forja/config.json`)) add('warn', L('config.notMerged', { dir: cfg.paths.main }));
+    if (cfg.goldfish && !cfg.models.goldfish.some(e => !e.startsWith('claude:'))) add('warn', L('cli.doctor.goldfishNoVendor'));
   } catch (e) { add('FAIL', `${L('cli.doctor.configBad')}\n${e instanceof ConfigError ? e.errors.map(x => `  ${x}`).join('\n') : first(e)}`); }
   const claudeBin = claudeBinOf(cfg ?? {}, env);
   ok(!!resolveBin(claudeBin, project, env), L('cli.doctor.claude', { bin: claudeBin }), L('cli.doctor.claudeMissing', { bin: claudeBin }));

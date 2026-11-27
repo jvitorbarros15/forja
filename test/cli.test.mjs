@@ -135,11 +135,33 @@ test('doctor fails on missing claude bin', async () => {
 });
 
 test('doctor passes with every tool present and fails on a missing check command', async () => {
-  const { project } = mkProject(), H = harness({ ghOut: () => "Token scopes: 'repo'\n" });
+  const { root, project } = mkProject(), H = harness({ ghOut: () => "Token scopes: 'repo'\n" });
   H.o.env = { PATH: fakeBin(tmp(), 'git', 'gh', 'claude', 'node') };
   assert.equal(await run(['doctor', '--project', project], H.o), 0, H.text());
   assert.match(H.text(), /All required checks passed/);
-  assert.match(H.text(), /\[warn\] \.forja\/config\.json is not in forja-main/);
+  assert.doesNotMatch(H.text(), /not in forja-main/);
+  assert.match(H.text(), /\[warn\] goldfish is enabled, but models\.goldfish has no non-Claude entry/);
+
+  const main = `${root}/proj-forja-wt/forja-main`;
+  mkdirSync(main, { recursive: true });
+  const Hmain = harness({ ghOut: () => "Token scopes: 'repo'\n" });
+  Hmain.o.env = H.o.env;
+  assert.equal(await run(['doctor', '--project', project], Hmain.o), 0, Hmain.text());
+  assert.match(Hmain.text(), /\[warn\] \.forja\/config\.json is not in forja-main/);
+
+  put(`${main}/.forja/config.json`, { ...CONFIG, goldfish: false });
+  const Hmerged = harness({ ghOut: () => "Token scopes: 'repo'\n" });
+  Hmerged.o.env = H.o.env;
+  assert.equal(await run(['doctor', '--project', project], Hmerged.o), 0, Hmerged.text());
+  assert.doesNotMatch(Hmerged.text(), /not in forja-main/);
+  assert.doesNotMatch(Hmerged.text(), /goldfish is enabled/);
+
+  put(`${main}/.forja/config.json`, { ...CONFIG, vendors: { codex: { enabled: true } }, models: { goldfish: ['codex:sol'] } });
+  const Hgold = harness({ ghOut: () => "Token scopes: 'repo'\n" });
+  Hgold.o.env = { PATH: fakeBin(tmp(), 'git', 'gh', 'claude', 'codex', 'node') };
+  assert.equal(await run(['doctor', '--project', project], Hgold.o), 0, Hgold.text());
+  assert.doesNotMatch(Hgold.text(), /goldfish is enabled/);
+  rmSync(main, { recursive: true, force: true });
 
   put(`${project}/.forja/config.json`, { ...CONFIG, checks: { test: 'nonexistent-tool-xyz run' }, vendors: { codex: { enabled: true, bin: 'codex-missing' } } });
   const H2 = harness({ ghOut: () => '' });

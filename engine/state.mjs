@@ -7,6 +7,17 @@ export const read = p => (existsSync(p) ? readFileSync(p, 'utf8') : '');
 export const readJson = (p, d) => (existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')) : d);
 // commands.json is an array of flat commands; anything else is empty. Run files name the cards they touched in `ids`.
 export const readCommands = file => (a => (Array.isArray(a) ? a : []))(readJson(file, []));
+const CMD_TTL = 7 * 86400e3, CMD_MAX = 200;
+export function pruneCommands(list, now = Date.now()) {
+  const active = [], done = [];
+  for (const c of list) {
+    if (c.status === 'pending' || c.status === 'running') { active.push(c); continue; }
+    const ts = Date.parse(c.doneAt ?? c.at ?? '');
+    if (!Number.isFinite(ts) || now - ts <= CMD_TTL) done.push(c);
+  }
+  const keep = new Set([...active, ...done.slice(-CMD_MAX)]);
+  return list.filter(c => keep.has(c));
+}
 export const idsOf = run => (run?.ids ?? []).map(String);
 const pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 export const writeJson = (p, v) => {

@@ -242,3 +242,53 @@ test('loadProjectConfig finds forja-main under a worktreeRoot the checkout sets'
     assert.equal(loadProjectConfig(proj).repo, 'a/merged');
   } finally { cleanup(proj, root); }
 });
+
+test('intakeLabel must be a non-empty label not starting with "-"', () => {
+  for (const [value, ok] of [['forja', true], ['forja:in', true], ['ready to go', true], ['', false], ['   ', false], ['-f', false], ['--flag', false], [' a', false], ['a\nb', false], [123, false]]) {
+    const dir = project({ ...base, intakeLabel: value });
+    try {
+      if (ok) assert.equal(loadConfig(dir).intakeLabel, value);
+      else assert.throws(() => loadConfig(dir), (e) => e.errors.some((s) => /intakeLabel/.test(s)), JSON.stringify(value));
+    } finally { cleanup(dir); }
+  }
+});
+
+test('reviewers.*.agent must be a relative path inside the repository', () => {
+  for (const [reviewers, ok] of [
+    [{ data: { agent: '.forja/agents/review-data.md' } }, true],
+    [{ data: { agent: 'x.md' } }, true],
+    [{ data: {} }, false],
+    [{ data: { agent: '' } }, false],
+    [{ data: { agent: '../escape.md' } }, false],
+    [{ data: { agent: 'a/../../escape.md' } }, false],
+    [{ data: { agent: '..\\escape.md' } }, false],
+    [{ data: { agent: '/etc/passwd' } }, false],
+    [{ data: { agent: 'C:/evil.md' } }, false],
+    [{ data: { agent: '.' } }, false],
+    ['bad', false],
+  ]) {
+    const dir = project({ ...base, reviewers });
+    try {
+      if (ok) assert.ok(loadConfig(dir).reviewers.data.agent);
+      else assert.throws(() => loadConfig(dir), (e) => e.errors.some((s) => /reviewers/.test(s)), JSON.stringify(reviewers));
+    } finally { cleanup(dir); }
+  }
+});
+
+test('vendors.ollama.url must be http or https when ollama is enabled', () => {
+  for (const [ollama, ok] of [
+    [{ enabled: true, url: 'http://127.0.0.1:11434' }, true],
+    [{ enabled: true, url: 'https://ollama.example.com/' }, true],
+    [{ enabled: false, url: 'file:///etc/passwd' }, true],
+    [{ enabled: true, url: 'file:///etc/passwd' }, false],
+    [{ enabled: true, url: 'ftp://127.0.0.1:11434' }, false],
+    [{ enabled: true, url: 'not-a-url' }, false],
+    [{ enabled: true, url: '' }, false],
+  ]) {
+    const dir = project({ ...base, vendors: { ollama } });
+    try {
+      if (ok) assert.equal(loadConfig(dir).vendors.ollama.url, ollama.url);
+      else assert.throws(() => loadConfig(dir), (e) => e.errors.some((s) => /vendors\.ollama\.url/.test(s)), JSON.stringify(ollama));
+    } finally { cleanup(dir); }
+  }
+});

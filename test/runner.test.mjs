@@ -277,6 +277,44 @@ test('a Claude limit hit is logged to the quota file and spends no retry', async
   assert.equal(existsSync(`${E.J(9)}/decision.md`), false);
 });
 
+test('a Claude reviewer that dirties the worktree fails without writing its review file', async () => {
+  const E = mkEnv();
+  g(E.project, 'worktree', 'add', '-q', E.WT(15), '-b', 'forja/15-x', 'origin/main');
+  const runReview = async (vars) => {
+    const ctx = E.ctx({ once: true });
+    job(E, 15, { stage: 'review', round: 1, running: ['code'] });
+    await withFake(vars, async () => {
+      startAgent(ctx, 15, { agent: 'review-code', model: 'sonnet', issue: 15, round: 1, out: `${E.J(15)}/round-1/review-code.md`, cwd: E.WT(15), prompt: 'review' });
+      await Promise.all([...ctx.pending]);
+    });
+  };
+  await runReview({ FAKE_TEXT: 'VERDICT: PASS\n- ok', FAKE_WRITE: 'sneaky.txt::x' });
+  assert.equal(existsSync(`${E.J(15)}/round-1/review-code.md`), false);
+  let b = readJson(E.P.board).jobs.find(x => x.issue === 15);
+  assert.equal(b.workers.find(w => w.id === 'review-code-1').status, 'failed');
+  assert.deepEqual(b.agentRetry, ['code']);
+  assert.match(b.events.at(-1).text, /changed the worktree/);
+
+  rmSync(`${E.WT(15)}/sneaky.txt`);
+  await runReview({ FAKE_TEXT: 'VERDICT: PASS\n- ok' });
+  assert.match(rd(`${E.J(15)}/round-1/review-code.md`), /^VERDICT: PASS\nCommit: [0-9a-f]{40}\n- ok\n$/);
+  b = readJson(E.P.board).jobs.find(x => x.issue === 15);
+  assert.equal(b.workers.find(w => w.id === 'review-code-1').status, 'ok');
+});
+
+test('execStep ignores a failing optional run step so a round-0 redo still writes owner.md and continues', () => {
+  const E = mkEnv(), ctx = E.ctx(), noteFile = `${E.J(16)}/owner.md`;
+  job(E, 16, { stage: 'needs-you', round: 0 });
+  const r = execStep(ctx, {
+    issue: 16, step: 'redo', set: { stage: 'spec' }, event: 'redo',
+    do: [{ run: [process.execPath, '-e', 'process.exit(1)'], optional: true }, { write: noteFile, text: 'owner note' }],
+  });
+  assert.equal(r.ok, true);
+  assert.equal(rd(noteFile), 'owner note');
+  assert.equal(readJson(E.P.board).jobs.find(x => x.issue === 16).stage, 'spec');
+  assert.ok(E.logs.some(l => l.startsWith('run ignored:')));
+});
+
 test('reapDead closes a dead deploy run, its cards and its command', () => {
   const E = mkEnv();
   job(E, 7, { stage: 'merged' });

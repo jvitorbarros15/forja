@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { loadConfig } from '../engine/config.mjs';
-import { bestEffort, createBoard, idsOf, locked, paths, readCommands, readJson } from '../engine/state.mjs';
+import { bestEffort, createBoard, idsOf, locked, paths, pruneCommands, readCommands, readJson } from '../engine/state.mjs';
 
 const STATE_URL = new URL('../engine/state.mjs', import.meta.url).href;
 const CONFIG_URL = new URL('../engine/config.mjs', import.meta.url).href;
@@ -227,6 +227,22 @@ test('a long lock is never taken from a live holder or a holder that cannot be i
     assert.equal(locked(file, () => 'ran', { long: true, waitMs: 5000 }), 'ran');
     assert.ok(!fs.existsSync(lock));
   } finally { holder.kill(); cleanup(); }
+});
+
+test('pruneCommands drops finished commands older than 7 days, caps finished at 200, and keeps active ones', () => {
+  const now = Date.UTC(2026, 6, 15);
+  const old = new Date(now - 8 * 86400e3).toISOString(), fresh = new Date(now - 86400e3).toISOString();
+  const list = [
+    { id: 'old-pending', status: 'pending', at: old },
+    { id: 'old-running', status: 'running', at: old },
+    { id: 'old-done', status: 'done', at: old, doneAt: old },
+    { id: 'old-refused', status: 'refused', at: old },
+    ...Array.from({ length: 205 }, (_, i) => ({ id: `d${i}`, status: 'done', at: fresh, doneAt: fresh })),
+  ];
+  const kept = pruneCommands(list, now);
+  assert.equal(kept.length, 202);
+  assert.deepEqual(kept.slice(0, 3).map(c => c.id), ['old-pending', 'old-running', 'd5']);
+  assert.equal(kept.at(-1).id, 'd204');
 });
 
 test('gone is true only for a process known not to exist', async () => {

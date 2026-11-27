@@ -71,6 +71,20 @@ function merge(base, over) {
 const fwd = (p) => p.replace(/\\/g, '/');
 const ENTRY = /^(claude|codex|gemini|agy|ollama|local):[\w.:-]+$/;
 
+export function reviewerAgentPath(main, p, checkReal = false) {
+  if (typeof p !== 'string' || !p.trim() || /[\p{Cc}]/u.test(p) || path.isAbsolute(p) || /^([a-z]:|[\\/])/i.test(p)) return null;
+  const root = path.resolve(main), abs = path.resolve(root, p.replaceAll('\\', '/'));
+  const inside = (base, target) => {
+    const rel = path.relative(base, target).replaceAll('\\', '/');
+    return !!rel && rel !== '..' && !rel.startsWith('../') && !path.isAbsolute(rel);
+  };
+  if (!inside(root, abs)) return null;
+  if (checkReal && fs.existsSync(root) && fs.existsSync(abs)) {
+    try { if (!inside(fs.realpathSync.native(root), fs.realpathSync.native(abs))) return null; } catch { return null; }
+  }
+  return fwd(abs);
+}
+
 export function validateConfig(cfg) {
   const errors = [];
   if (typeof cfg.repo !== 'string' || !/^[\w.-]+\/[\w.-]+$/.test(cfg.repo)) errors.push('repo must be "owner/name"');
@@ -78,9 +92,22 @@ export function validateConfig(cfg) {
     errors.push('approvers must be a non-empty array of logins');
   }
   if (typeof cfg.defaultBranch !== 'string' || !/^[A-Za-z0-9_][A-Za-z0-9_./-]*$/.test(cfg.defaultBranch) || cfg.defaultBranch.includes('..')) errors.push('defaultBranch must be a branch name');
+  if (typeof cfg.intakeLabel !== 'string' || !/^[^\s\p{Cc}-][^\p{Cc}]*$/u.test(cfg.intakeLabel) || cfg.intakeLabel.trim() !== cfg.intakeLabel) {
+    errors.push('intakeLabel must be a non-empty label not starting with "-"');
+  }
   if (!languages().includes(cfg.language)) errors.push(`language "${cfg.language}" is not supported (${languages().join(', ')})`);
 
-  const kinds = new Set([...Object.keys(cfg.models?.review ?? {}), ...Object.keys(cfg.reviewers ?? {})]);
+  if (cfg.reviewers !== undefined && !isObj(cfg.reviewers)) errors.push('reviewers must be an object');
+  else for (const [k, r] of Object.entries(cfg.reviewers ?? {})) {
+    if (!isObj(r) || !reviewerAgentPath('forja-main', r.agent)) errors.push(`reviewers.${k}.agent must be a relative path inside the repository`);
+  }
+  if (cfg.vendors?.ollama?.enabled) {
+    let ok = false;
+    try { ok = typeof cfg.vendors.ollama.url === 'string' && ['http:', 'https:'].includes(new URL(cfg.vendors.ollama.url).protocol); } catch {}
+    if (!ok) errors.push('vendors.ollama.url must be an http:// or https:// URL');
+  }
+
+  const kinds = new Set([...Object.keys(cfg.models?.review ?? {}), ...(isObj(cfg.reviewers) ? Object.keys(cfg.reviewers) : [])]);
   const tiers = Array.isArray(cfg.tiers) ? cfg.tiers : [];
   if (!tiers.length) errors.push('tiers must be a non-empty array');
   const seen = new Set();
@@ -151,7 +178,7 @@ export function loadConfig(projectDir, { mainDir, pluginRoot } = {}) {
     if (!isObj(user)) throw new ConfigError([`${fwd(file)} must be a JSON object`]);
   }
   const cfg = merge(structuredClone(DEFAULTS), user);
-  for (const k of Object.keys(cfg.reviewers ?? {})) cfg.models.review[k] ??= ['claude:sonnet'];
+  if (isObj(cfg.reviewers)) for (const k of Object.keys(cfg.reviewers)) cfg.models.review[k] ??= ['claude:sonnet'];
   const errors = validateConfig(cfg);
   if (errors.length) throw new ConfigError(errors);
   const worktreeRoot = worktreeRootOf(project, cfg.worktreeRoot);

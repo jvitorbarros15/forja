@@ -11,7 +11,7 @@ import { alive } from './platform.mjs';
 import { roles } from './registry.mjs';
 import { createBoard, field, findingFiles, gh as realGh, locked, paths, read, readCommands, readJson, writeJson } from './state.mjs';
 
-const MIN = 60e3, HOUR = 3600e3, STALE = 2 * HOUR, NO_CI_WAIT = 3 * MIN;
+const MIN = 60e3, HOUR = 3600e3, STALE = 2 * HOUR, NO_CI_WAIT = 3 * MIN, CI_MISSING_WAIT = 15 * MIN;
 export const ID_RE = /^(\d{1,9}|[a-z0-9-]{1,40})$/i;
 const ACTION = { approve: 'approve', aprovar: 'approve', redo: 'redo', refazer: 'redo' };
 const CONSUMES = ['merge', 'open-pr', 'redo'];
@@ -205,8 +205,8 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
 
   const redo = (job, note, q) => {
     const n = job.issue;
-    if (!job.round) return { step: 'redo', set: { stage: 'spec', running: ['spec'], specRevised: false, paused: false, approved: false, retryAt: null }, do: [...(existsSync(WT(n)) ? [{ run: call('cleanup', n) }] : []), { write: `${J(n)}/owner.md`, text: note }, agentDo('spec', job.specModel ?? modelOf(cfg.models.spec, q), job, ' Revise spec.md using owner.md.')], event: L('event.redoSpec') };
-    const step = buildStep('redo', job, { stage: 'build', round: job.round + 1, fails: 0, reviews: {}, paused: false, approved: false, retryAt: null }, L('event.redoRound', { round: job.round + 1 }), q);
+    if (!job.round) return { step: 'redo', set: { stage: 'spec', running: ['spec'], specRevised: false, paused: false, approved: false, retryAt: null, ciWaited: null }, do: [...(existsSync(WT(n)) ? [{ run: call('cleanup', n), optional: true }] : []), { write: `${J(n)}/owner.md`, text: note }, agentDo('spec', job.specModel ?? modelOf(cfg.models.spec, q), job, ' Revise spec.md using owner.md.')], event: L('event.redoSpec') };
+    const step = buildStep('redo', job, { stage: 'build', round: job.round + 1, fails: 0, reviews: {}, paused: false, approved: false, retryAt: null, ciWaited: null }, L('event.redoRound', { round: job.round + 1 }), q);
     step.do.unshift({ write: `${J(n)}/round-${job.round}/owner.md`, text: note });
     return step;
   };
@@ -261,10 +261,12 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
     const dir = `${cfg.paths.main}/.github/workflows`;
     try { return existsSync(dir) && readdirSync(dir).some(f => /\.ya?ml$/i.test(f)); } catch { return false; }
   };
+  const ciAge = job => now() - Math.max(Date.parse(job.stageSince ?? job.since ?? 0) || 0, Date.parse(job.prHeadAt ?? 0) || 0);
+  const ciMissing = job => job.ci === 'none' && !cfg.pr.requireCi && hasWorkflows()
+    && (ciAge(job) >= CI_MISSING_WAIT || (!!job.ciWaited && job.ciWaited === (job.prHead ?? true)));
   // A PR whose head has no checks at all passes once they had NO_CI_WAIT to appear (they start a moment after a push),
   // unless pr.requireCi is set or forja-main has GitHub Actions workflows that have not reported yet.
-  const ciReady = job => job.ci === 'pass' || (job.ci === 'none' && !cfg.pr.requireCi && !hasWorkflows()
-    && now() - Math.max(Date.parse(job.stageSince ?? job.since ?? 0) || 0, Date.parse(job.prHeadAt ?? 0) || 0) >= NO_CI_WAIT);
+  const ciReady = job => job.ci === 'pass' || (job.ci === 'none' && !cfg.pr.requireCi && !hasWorkflows() && ciAge(job) >= NO_CI_WAIT);
 
   // The merge is pinned to the build that was reviewed: a head GitHub has that is not that commit was never reviewed.
   const headReviewed = job => (s => !!s && String(job.prHead ?? '').startsWith(s))(shaOf(read(`${J(job.issue)}/build.md`)));
@@ -429,7 +431,7 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
           const s = ask(job, L('need.reviewsThreeRounds', { rounds: MAX, kinds: bad.join(', '), note: reviews[bad[0]].note }), L('action.reviewsThreeRounds', { rounds: MAX }));
           return { ...s, set: { ...s.set, reviews } };
         }
-        return buildStep('rebuild', job, { stage: 'build', round: job.round + 1, fails: 0, reviews, approved: false }, L('event.reviewChanges', { kinds: bad.join(', '), round: job.round + 1 }), q);
+        return buildStep('rebuild', job, { stage: 'build', round: job.round + 1, fails: 0, reviews, approved: false, ciWaited: null }, L('event.reviewChanges', { kinds: bad.join(', '), round: job.round + 1 }), q);
       }
 
       case 'approve': {
@@ -445,12 +447,19 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
         if (job.ci === 'fail') {
           if (!job.round || job.round >= MAX) return fail(job, L(job.round ? 'need.ciFailedRounds' : 'need.ciFailed', { pr: job.pr, rounds: MAX }), L('action.ciFailed', { rounds: MAX }));
           // The CI error becomes the next round's note, so a red CI goes back to build without the owner.
-          const s = buildStep('ci-redo', job, { stage: 'build', round: job.round + 1, fails: 0, reviews: {}, approved: false }, L('event.ciRedo', { pr: job.pr, round: job.round + 1 }), q);
+          const s = buildStep('ci-redo', job, { stage: 'build', round: job.round + 1, fails: 0, reviews: {}, approved: false, ciWaited: null }, L('event.ciRedo', { pr: job.pr, round: job.round + 1 }), q);
           s.do.unshift({ run: call('cilog', n, job.round, job.pr) });
           return s;
         }
-        if (!ciReady(job)) return wait('ci');
-        if (job.approved || job.prCmd?.cmd === 'approve' || mergesAlone(job)) {
+        const ownerApprove = job.approved || job.prCmd?.cmd === 'approve';
+        if (!ciReady(job)) {
+          if (!ciMissing(job)) return wait('ci');
+          if (!ownerApprove) {
+            const s = ask(job, L('need.ciMissing', { pr: job.pr }), L('action.ciMissing'));
+            return { ...s, set: { ...s.set, ciWaited: job.prHead ?? true } };
+          }
+        }
+        if (ownerApprove || mergesAlone(job)) {
           if (unreviewed(job)) return fail(job, L('need.mergeBlocked', { why: unreviewed(job) }), L('action.mergeBlocked'));
           return headReviewed(job) ? merge(job) : ask(job, L('need.headMoved', { pr: job.pr }), L('action.headMoved'));
         }
