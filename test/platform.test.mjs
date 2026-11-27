@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { IS_WIN, alive, killTree, spawnDetached, linkDir, notify } from '../engine/platform.mjs';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'forja-plat-'));
@@ -29,6 +29,14 @@ test('alive checks the image name when given', () => {
   assert.equal(alive(process.pid, startedAt, 'definitely-not-this.exe'), false);
 });
 
+test('alive matches image without .exe', () => {
+  const startedAt = new Date().toISOString(), name = basename(process.execPath).replace(/\.exe$/i, '');
+  assert.equal(alive(process.pid, startedAt, name), true);
+  assert.equal(alive(process.pid, startedAt, name.toUpperCase()), true);
+  assert.equal(alive(process.pid, startedAt, `${name}.exe`), true);
+  assert.equal(alive(process.pid, startedAt, 'definitely-not-this'), false);
+});
+
 test('killTree stops a detached child', async () => {
   const startedAt = new Date().toISOString();
   const child = spawnDetached(process.execPath, ['-e', 'setInterval(()=>{},1e3)']);
@@ -41,6 +49,11 @@ test('killTree stops a detached child', async () => {
 
 test('killTree never throws on a dead pid', () => {
   killTree(2 ** 22 - 1);
+});
+
+test('killTree ignores invalid pids', () => {
+  for (const pid of [0, null, undefined, NaN, 1, -1, 'x']) killTree(pid);
+  assert.equal(alive(process.pid, new Date().toISOString()), true);
 });
 
 test('spawnDetached appends output to logFile', async () => {

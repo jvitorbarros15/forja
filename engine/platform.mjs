@@ -1,24 +1,28 @@
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, closeSync, openSync, symlinkSync } from 'node:fs';
 import { uptime } from 'node:os';
+import { basename } from 'node:path';
 
 export const IS_WIN = process.platform === 'win32';
 const BOOT = Date.now() - uptime() * 1e3;
-const run = (cmd, a) => execFileSync(cmd, a, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+const run = (cmd, a) => execFileSync(cmd, a, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
 
 // A pid recorded before the last boot belongs to nobody. Fast Startup keeps uptime running across a shutdown,
 // so when an image is given the pid must also still be that program; anything else reusing it counts as dead.
 export function alive(pid, startedAt, image) {
   pid = Number(pid);
   if (!(pid > 0) || new Date(startedAt).getTime() < BOOT) return false;
+  const name = image?.replace(/\.exe$/i, '').toLowerCase();
   try {
-    if (IS_WIN) return run('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH']).toLowerCase().startsWith(image ? `"${image.toLowerCase()}"` : '"');
+    if (IS_WIN) return run('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH']).toLowerCase().startsWith(name ? `"${name}.exe"` : '"');
     process.kill(pid, 0);
-    return !image || run('ps', ['-p', String(pid), '-o', 'comm=']).toLowerCase().includes(image.toLowerCase().replace(/\.exe$/, ''));
+    return !name || basename(run('ps', ['-p', String(pid), '-o', 'comm=']).trim()).toLowerCase().slice(0, 15) === name.slice(0, 15);
   } catch { return false; }
 }
 
 export function killTree(pid) {
+  pid = Number(pid);
+  if (!(pid > 1)) return;
   try {
     if (IS_WIN) spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
     else try { process.kill(-pid, 'SIGKILL'); } catch { process.kill(pid, 'SIGKILL'); }
@@ -47,9 +51,9 @@ export function notify(text, { desktop, logFile } = {}) {
     if (!toast) return;
     c = spawn('powershell', ['-NoProfile', '-Command', 'Import-Module BurntToast; New-BurntToastNotification -Text "Forja", $env:FORJA_MSG'], { env: { ...process.env, FORJA_MSG: text }, stdio: 'ignore', windowsHide: true });
   } else if (process.platform === 'darwin') {
-    c = spawn('osascript', ['-e', 'on run argv', '-e', 'display notification (item 1 of argv) with title "Forja"', '-e', 'end run', text], { stdio: 'ignore' });
+    c = spawn('osascript', ['-e', 'display notification (system attribute "FORJA_MSG") with title "Forja"'], { env: { ...process.env, FORJA_MSG: text }, stdio: 'ignore' });
   } else {
-    c = spawn('notify-send', ['Forja', text], { stdio: 'ignore' });
+    c = spawn('notify-send', ['Forja', '--', text], { stdio: 'ignore' });
   }
   c.on('error', () => {});
   c.unref();
