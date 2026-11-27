@@ -1,6 +1,6 @@
 // Table tests for the step decider. Each env is a temp project with its own .forja/config.json and state dir; gh is a fake.
 import { execFile } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
@@ -767,4 +767,23 @@ test('a reviewer file carries the commit the runner saw at launch, whatever the 
   assert.equal(T.agentEnd(j, a, true, 'VERDICT: PASS').write, `VERDICT: PASS\nCommit: ${'f'.repeat(40)}\n`);
   assert.equal(T.agentEnd(j, { ...a, commit: undefined }, true, 'VERDICT: PASS').write, 'VERDICT: PASS\nCommit: -\n');
   assert.equal(T.agentEnd(job({ issue: 27, stage: 'approve', running: ['approver'] }), { agent: 'approver', out: `${J(27)}/decision.md` }, true, 'APPROVE\nTier: B').write, 'APPROVE\nTier: B\n');
+});
+
+test('an issue an approver did not label is not looked up again until GitHub says it changed', () => {
+  const C = mkEnv(MULTI);
+  let events = 0, updatedAt = '2026-01-01T00:00:00Z', by = 'stranger';
+  const gh = (...a) => (a[0] === 'issue' && a[1] === 'list' ? (a.includes('number,title,updatedAt') ? JSON.stringify([{ number: 5, title: 'x', updatedAt }]) : '[]') : a[0] === 'api' ? (events++, `${by}\n`) : '');
+  const tick = o => createTick(C.cfg, { gh }).tick(o);
+  assert.deepEqual(tick({ dryRun: true }).ignored, [{ issue: 5, labeledBy: 'stranger' }]);
+  assert.equal(events, 1);
+  assert.equal(existsSync(C.P.ignored), false);
+  assert.deepEqual(tick({}).ignored, [{ issue: 5, labeledBy: 'stranger' }]);
+  assert.equal(events, 2);
+  assert.deepEqual(tick({}).ignored, [{ issue: 5, labeledBy: 'stranger' }]);
+  assert.equal(events, 2);
+  by = 'owner'; updatedAt = '2026-01-02T00:00:00Z';
+  const r = tick({});
+  assert.equal(events, 3);
+  assert.deepEqual([r.ignored, r.steps.map(s => s.step)], [[], ['pickup']]);
+  assert.deepEqual(JSON.parse(readFileSync(C.P.ignored, 'utf8')), {});
 });

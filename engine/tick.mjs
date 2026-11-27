@@ -474,14 +474,20 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
     for (const j of synced) try { syncPr(j); } catch {}
     const steps = commandSteps(b, q).filter(s => !only || s.issue === only), commanded = new Set(steps.map(s => s.issue));
 
-    const label = JSON.stringify(cfg.intakeLabel);
-    for (const i of JSON.parse(gh('issue', 'list', '-R', R, '--label', cfg.intakeLabel, '--state', 'open', '--json', 'number,title', '--limit', '100'))) {
+    // The events call pages through the whole history, so an issue an approver did not label is checked again only when
+    // GitHub says the issue changed (a new label event bumps updatedAt).
+    const label = JSON.stringify(cfg.intakeLabel), seen = readJson(P.ignored, {}), open = JSON.parse(gh('issue', 'list', '-R', R, '--label', cfg.intakeLabel, '--state', 'open', '--json', 'number,title,updatedAt', '--limit', '100')), kept = {};
+    for (const i of open) {
       if (b.jobs.some(j => j.issue === i.number) || (only && i.number !== only)) continue;
+      const known = seen[i.number];
+      if (known && i.updatedAt && known.updatedAt === i.updatedAt) { kept[i.number] = known; ignored.push({ issue: i.number, labeledBy: known.labeledBy }); continue; }
       const by = gh('api', `repos/${R}/issues/${i.number}/events`, '--paginate', '--jq', `.[]|select(.event=="labeled" and .label.name==${label})|.actor.login`).trim().split('\n').at(-1);
-      if (!isApprover(by)) { ignored.push({ issue: i.number, labeledBy: by || null }); continue; }
+      if (!isApprover(by)) { if (i.updatedAt) kept[i.number] = { updatedAt: i.updatedAt, labeledBy: by || null }; ignored.push({ issue: i.number, labeledBy: by || null }); continue; }
       const job = { issue: i.number, round: 0 }, specModel = modelOf(cfg.models.spec, q);
       steps.push({ issue: i.number, step: 'pickup', set: { title: i.title, stage: 'spec', round: 0, fails: 0, specModel, running: ['spec'] }, do: [agentDo('spec', specModel, job), ...(triageOn ? [bg('triage', i.number)] : [])], event: L('event.issueReceived') });
     }
+
+    if (!dryRun && !only && JSON.stringify(kept) !== JSON.stringify(seen)) writeJson(P.ignored, kept);
 
     const deploys = [];
     for (const job of b.jobs) {

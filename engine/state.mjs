@@ -36,7 +36,7 @@ export const git = (cwd, ...a) => run('git', ['-c', 'safe.directory=*', '-C', cw
 export function paths(cfg) {
   const s = cfg.paths.state;
   return {
-    board: `${s}/board.json`, queue: `${s}/queue.json`, quota: `${s}/quota.json`, commands: `${s}/commands.json`, runner: `${s}/runner.json`,
+    board: `${s}/board.json`, queue: `${s}/queue.json`, quota: `${s}/quota.json`, commands: `${s}/commands.json`, runner: `${s}/runner.json`, ignored: `${s}/ignored.json`,
     jobs: n => `${s}/jobs/${n}`, docs: `${s}/docs`, logs: `${s}/logs`,
     wt: n => `${cfg.paths.worktreeRoot}/forja-${n}`, main: cfg.paths.main,
   };
