@@ -20,6 +20,23 @@ export function alive(pid, startedAt, image) {
   } catch { return false; }
 }
 
+// True only when the process is known not to exist; a failure to find out counts as "may be alive", because the answer
+// decides whether someone else's lock is taken over.
+export function gone(pid, startedAt, image) {
+  pid = Number(pid);
+  if (!(pid > 0)) return false;
+  if (new Date(startedAt).getTime() < BOOT) return true;
+  const name = image?.replace(/\.exe$/i, '').toLowerCase();
+  try {
+    if (IS_WIN) {
+      const out = run('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH']).toLowerCase();
+      return out.startsWith('"') ? !!name && !out.startsWith(`"${name}.exe"`) : true;
+    }
+    try { process.kill(pid, 0); } catch (e) { return e.code === 'ESRCH'; }
+    return !!name && basename(run('ps', ['-p', String(pid), '-o', 'comm=']).trim()).toLowerCase().slice(0, 15) !== name.slice(0, 15);
+  } catch { return false; }
+}
+
 export function killTree(pid) {
   pid = Number(pid);
   if (!(pid > 1)) return;

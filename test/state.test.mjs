@@ -187,3 +187,31 @@ test('bestEffort retries a busy lock, gives up quietly, and reports whether it w
   assert.equal(bestEffort(() => { n++; throw new Error('disk'); }), false);
   assert.equal(n, 1);
 });
+
+test('a long lock is never taken from a live holder or a holder that cannot be identified, and is taken from a dead one', async () => {
+  const { dir, cleanup } = setup(), holder = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { stdio: 'ignore' });
+  try {
+    const file = path.join(dir, 'x.json'), lock = `${file}.lock`;
+    fs.writeFileSync(lock, String(holder.pid));
+    assert.throws(() => locked(file, () => 1, { long: true, waitMs: 1000 }), e => /lock busy/.test(e.message) && e.message.includes('x.json.lock'));
+    assert.equal(fs.readFileSync(lock, 'utf8'), String(holder.pid));
+    fs.writeFileSync(lock, '');
+    assert.throws(() => locked(file, () => 1, { long: true, waitMs: 500 }), /lock busy/);
+    assert.ok(fs.existsSync(lock));
+    holder.kill();
+    await new Promise(r => holder.on('exit', r));
+    fs.writeFileSync(lock, String(holder.pid));
+    assert.equal(locked(file, () => 'ran', { long: true, waitMs: 5000 }), 'ran');
+    assert.ok(!fs.existsSync(lock));
+  } finally { holder.kill(); cleanup(); }
+});
+
+test('gone is true only for a process known not to exist', async () => {
+  const { gone } = await import('../engine/platform.mjs'), at = Date.now(), dead = spawn(process.execPath, ['-e', '0']);
+  await new Promise(r => dead.on('exit', r));
+  assert.equal(gone(process.pid, at, 'node'), false);
+  assert.equal(gone(process.pid, at, 'definitely-not-node'), true);
+  assert.equal(gone(dead.pid, at, 'node'), true);
+  assert.equal(gone(0, at, 'node'), false);
+  assert.equal(gone(process.pid, 0, 'node'), true);
+});

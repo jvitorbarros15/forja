@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { alive } from './platform.mjs';
+import { gone } from './platform.mjs';
 
 export const read = p => (existsSync(p) ? readFileSync(p, 'utf8') : '');
 export const readJson = (p, d) => (existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')) : d);
@@ -16,21 +16,25 @@ export const writeJson = (p, v) => {
 
 // The board has several writers (the runner, each agent's own process, background calls), so every read-change-write
 // holds a lock file. A lock left by a killed process expires after 10 seconds; after 5 seconds of waiting it throws, and the caller tries again on its next cycle.
-// `long` is for work that takes minutes (an install): it waits and expires after 45 minutes, and a lock whose holder
-// (its pid is written inside) is gone is taken over at once.
-export function locked(file, fn, { long = false } = {}) {
-  const lock = `${file}.lock`, stale = long ? 45 * 60e3 : 10e3, step = long ? 250 : 25, tries = (long ? 45 * 60e3 : 5e3) / step;
+// `long` is for work that takes minutes (an install): it waits and expires after 45 minutes (`waitMs` shortens the wait), and a
+// lock whose holder (its pid is written inside) is known to be gone is taken over at once.
+export function locked(file, fn, { long = false, waitMs = long ? 45 * 60e3 : 5e3 } = {}) {
+  const lock = `${file}.lock`, stale = long ? 45 * 60e3 : 10e3, step = long ? 250 : 25, tries = waitMs / step;
   // A lock that vanished between the failed open and this look has age 0: only a lock still there and old is removed,
   // or the removal could take the lock another process has just created.
   const age = () => { try { return Date.now() - statSync(lock).mtimeMs; } catch { return 0; } };
-  const orphan = () => { try { const pid = Number(readFileSync(lock, 'utf8')); return long && pid > 0 && !alive(pid, statSync(lock).mtimeMs, 'node'); } catch { return false; } };
+  const look = () => { try { return `${readFileSync(lock, 'utf8')}@${statSync(lock).mtimeMs}`; } catch { return null; } };
+  // Taken over only when the holder is known gone and the lock is still the very one that was looked at.
+  const orphan = () => {
+    const seen = look(), pid = Number(seen?.split('@')[0]);
+    return long && pid > 0 && gone(pid, Number(seen.split('@')[1]), 'node') && look() === seen;
+  };
   mkdirSync(dirname(lock), { recursive: true });
   let fd = null;
   for (let i = 0; i < tries && fd === null; i++) try { fd = openSync(lock, 'wx'); } catch { if (age() > stale || orphan()) try { rmSync(lock, { force: true }); } catch {} else pause(step); }
-  if (fd === null) throw new Error('board lock busy');
-  writeSync(fd, String(process.pid));
+  if (fd === null) throw new Error(`board lock busy: ${lock}`);
   // A lock Windows refuses to delete right now is left to expire; the write itself is already done.
-  try { return fn(); } finally { closeSync(fd); try { rmSync(lock, { force: true, maxRetries: 5, retryDelay: 20 }); } catch {} }
+  try { writeSync(fd, String(process.pid)); return fn(); } finally { closeSync(fd); try { rmSync(lock, { force: true, maxRetries: 5, retryDelay: 20 }); } catch {} }
 }
 
 // For a write that records something already done (a quota line, a deploy result): the work cannot be undone, so a busy lock
