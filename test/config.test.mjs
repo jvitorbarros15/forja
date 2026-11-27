@@ -145,3 +145,10 @@ test('tier helpers and reviewsFor', () => {
     assert.equal(tierOf(cfg, 'C').strongSpec, true);
   } finally { cleanup(dir); }
 });
+
+test('agent roles must use claude entries', () => {
+  const dir = project({ ...base, vendors: { codex: { enabled: true } }, models: { advisor: ['codex:sol'], spec: ['claude:sonnet', 'codex:sol'] } });
+  try {
+    assert.throws(() => loadConfig(dir), (e) => e.errors.some((s) => /models\.advisor.*claude/.test(s)) && e.errors.some((s) => /models\.spec.*claude/.test(s)));
+  } finally { cleanup(dir); }
+});

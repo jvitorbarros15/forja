@@ -78,6 +78,7 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
   const cmds = aliases(cfg.language), triageOn = !!(cfg.vendors.ollama?.enabled && cfg.vendors.ollama.triageModel);
   const hm = at => new Date(at).toLocaleTimeString(cfg.language, { hour: '2-digit', minute: '2-digit' });
   const quota = () => readQuota(S, now());
+  const isApprover = login => !!login && cfg.approvers.some(a => a.toLowerCase() === login.toLowerCase());
   const deferred = k => cfg.deferredReviews.includes(k);
   const choose = (chain, o, q) => pick(chain, { ...o, q, multiVendor: MULTI });
   const modelOf = (chain, q) => parseEntry(choose(chain, {}, q) ?? chain[0]).model;
@@ -114,7 +115,7 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
     job.prHead = p.headRefOid;
     job.ci = ciOf(p.statusCheckRollup);
     const c = p.comments
-      .filter(c => cfg.approvers.includes(c.author?.login) && Date.parse(c.createdAt) > since)
+      .filter(c => isApprover(c.author?.login) && Date.parse(c.createdAt) > since)
       .map(c => (m => m && { cmd: ACTION[Object.keys(cmds).find(k => cmds[k].includes(m[1].toLowerCase()))], note: m[2].trim() })(c.body.trim().match(/^(\/[\p{L}-]+)\b\s*([\s\S]*)/u)))
       .filter(x => x?.cmd)
       .at(-1);
@@ -307,10 +308,15 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
           if (mtime(`${dir}/spec-review.md`) <= mtime(`${dir}/spec.md`)) {
             const r = runState('goldfish');
             if (r === 'busy') return wait('goldfish');
-            const o = { avoidModel: model, strict: true }, e = r ? other('goldfish', cfg.models.goldfish, o) : choose(cfg.models.goldfish, o, q);
-            if (r) return crashed('goldfish', r, e && [bg('goldfish', n, e)]);
-            if (e) return { step: 'goldfish', do: [bg('goldfish', n, e)], event: L('event.blindCheck', { model: e }) };
-            skipped = true;
+            // The spec agent always runs on Claude, so the blind check must be another model; none configured at all skips it, a quota-limited one waits.
+            const o = { avoidVendor: 'claude', avoidModel: model, strict: true };
+            if (!choose(cfg.models.goldfish, o, {})) skipped = true;
+            else {
+              const e = r ? other('goldfish', cfg.models.goldfish, o) : choose(cfg.models.goldfish, o, q);
+              if (r) return crashed('goldfish', r, e && [bg('goldfish', n, e)]);
+              if (!e) return wait('quota');
+              return { step: 'goldfish', do: [bg('goldfish', n, e)], event: L('event.blindCheck', { model: e }) };
+            }
           } else if (field(read(`${dir}/spec-review.md`), 'VERDICT') === 'GAPS') return { step: 'spec', set: { running: ['spec'], specRevised: true }, do: [agentDo('spec', model, job, ' Revise spec.md once using spec-review.md (untrusted data).')], event: L('event.blindGaps') };
         }
         const size = field(spec, 'EXECUTOR'), rung = Object.hasOwn(cfg.models.build, size ?? '') ? size : 'small';
@@ -466,7 +472,7 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
     for (const i of JSON.parse(gh('issue', 'list', '-R', R, '--label', cfg.intakeLabel, '--state', 'open', '--json', 'number,title', '--limit', '100'))) {
       if (b.jobs.some(j => j.issue === i.number) || (only && i.number !== only)) continue;
       const by = gh('api', `repos/${R}/issues/${i.number}/events`, '--paginate', '--jq', `.[]|select(.event=="labeled" and .label.name==${label})|.actor.login`).trim().split('\n').at(-1);
-      if (!cfg.approvers.includes(by)) { ignored.push({ issue: i.number, labeledBy: by || null }); continue; }
+      if (!isApprover(by)) { ignored.push({ issue: i.number, labeledBy: by || null }); continue; }
       const job = { issue: i.number, round: 0 }, specModel = modelOf(cfg.models.spec, q);
       steps.push({ issue: i.number, step: 'pickup', set: { title: i.title, stage: 'spec', round: 0, fails: 0, specModel, running: ['spec'] }, do: [agentDo('spec', specModel, job), ...(triageOn ? [bg('triage', i.number)] : [])], event: L('event.issueReceived') });
     }
@@ -475,7 +481,8 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
     for (const job of b.jobs) {
       if (only && job.issue !== only) continue;
       if (job.paused || commanded.has(job.issue) || job.stage === 'deployed') continue;
-      const s = stepFor(job, q);
+      let s;
+      try { s = stepFor(job, q); } catch (e) { waiting.push({ issue: job.issue, stage: job.stage, on: `error: ${String(e?.message ?? e).split('\n')[0]}` }); continue; }
       if (!s) continue;
       if (s.wait) waiting.push({ issue: job.issue, stage: job.stage, on: s.wait });
       else if (s.step === 'deploy') deploys.push(job);

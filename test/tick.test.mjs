@@ -702,3 +702,39 @@ test('the set command writes the board from the CLI', async () => {
   const j = JSON.parse(readFileSync(C.P.board, 'utf8')).jobs[0];
   assert.deepEqual([j.issue, j.note, j.events[0].text], [5, 'hi', 'went']);
 });
+
+test('goldfish never uses the spec model, also with several vendors; none configured skips, a limited one waits', () => {
+  const multi = { ...MULTI, models: { ...MULTI.models, goldfish: ['claude:sonnet'] } };
+  const C = mkEnv(multi), spec = n => put(`${C.J(n)}/spec.md`, 'TIER: B\nEXECUTOR: small\nBRANCH: forja/x\n');
+  spec(30);
+  const s = C.T.stepFor(job({ issue: 30, stage: 'spec', round: 0, tier: undefined, specModel: 'sonnet' }), {});
+  assert.equal(s.step, 'build');
+  assert.ok(s.event.includes(t('en', 'event.goldfishSkipped')));
+  const quotaChain = mkEnv({ ...MULTI, models: { ...MULTI.models, goldfish: ['gemini:hydrogen'] } });
+  put(`${quotaChain.J(31)}/spec.md`, 'TIER: B\nEXECUTOR: small\nBRANCH: forja/x\n');
+  const j = job({ issue: 31, stage: 'spec', round: 0, tier: undefined, specModel: 'sonnet' });
+  assert.match(quotaChain.T.stepFor(j, {}).do[0].bg, / goldfish 31 gemini:hydrogen$/);
+  put(`${quotaChain.F}/quota.json`, { calls: [{ p: 'gemini', at: now(), issue: 1, kind: 'goldfish', limited: true, until: later(30 * 60e3) }] });
+  assert.deepEqual(quotaChain.T.stepFor(j, quotaChain.T.quota()), { wait: 'quota' });
+});
+
+test('approver logins compare case-insensitively', () => {
+  const C = mkEnv({ ...MULTI, approvers: ['MixedCase'] });
+  reviewed(C, 22);
+  put(C.P.board, { jobs: [job({ issue: 22, stage: 'needs-you', pr: 9, reviews: R, note: 'n', ai: null })] });
+  const r = createTick(C.cfg, { gh: prGh([{ author: { login: 'mixedcase' }, body: '/approve', createdAt: later(60e3) }]) }).tick({ dryRun: true });
+  assert.deepEqual(r.steps.map(s => s.step), ['open-pr']);
+  const by = login => (...a) => (a[0] === 'issue' && a[1] === 'list' ? JSON.stringify([{ number: 5, title: 'x' }]) : a[0] === 'api' ? `${login}\n` : '');
+  assert.equal(createTick(C.cfg, { gh: by('MIXEDCASE') }).tick({ dryRun: true }).steps[0].step, 'pickup');
+});
+
+test('a job that throws does not abort the other jobs in the tick', () => {
+  const C = mkEnv(MULTI);
+  put(`${C.J(23)}/build.md`, 'BUILD: OK\nExecutor: claude:sonnet\n');
+  put(C.P.board, { jobs: [job({ issue: 23, stage: 'build', tier: 'Z', executor: 'medium', entry: 'claude:sonnet' }), job({ issue: 24, stage: 'pr', pr: 9, prState: 'open', ci: 'pending', tier: 'A', reviews: R })] });
+  const r = createTick(C.cfg, { gh: (...a) => (a[0] === 'issue' && a[1] === 'list' ? '[]' : '') }).tick({ dryRun: true });
+  assert.equal(r.waiting.length, 2);
+  assert.equal(r.waiting[0].issue, 23);
+  assert.ok(r.waiting[0].on.startsWith('error: '));
+  assert.deepEqual(r.waiting[1], { issue: 24, stage: 'pr', on: 'ci' });
+});

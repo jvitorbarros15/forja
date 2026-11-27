@@ -112,6 +112,9 @@ export function validateConfig(cfg) {
   };
   const m = cfg.models ?? {};
   for (const k of ['spec', 'specStrong', 'goldfish', 'approver', 'approverStrong', 'advisor']) checkChain(`models.${k}`, m[k]);
+  for (const k of ['spec', 'specStrong', 'approver', 'approverStrong', 'advisor']) {
+    for (const e of Array.isArray(m[k]) ? m[k] : []) if (typeof e === 'string' && !e.startsWith('claude:')) errors.push(`models.${k}: "${e}" must be a claude: entry (it runs as a Claude agent)`);
+  }
   for (const [k, v] of Object.entries(m.build ?? {})) checkChain(`models.build.${k}`, v);
   for (const [k, v] of Object.entries(m.review ?? {})) checkChain(`models.review.${k}`, v);
   if (!Array.isArray(m.buildEscalation) || !m.buildEscalation.length) errors.push('models.buildEscalation must be a non-empty array');
