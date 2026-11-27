@@ -4,7 +4,7 @@ import { check } from './checks.mjs';
 import { PROTECTED, globMatch } from './config.mjs';
 import { t } from './i18n.mjs';
 import { logCall, parseEntry, quota } from './models.mjs';
-import { bestEffort, field, git, paths, read } from './state.mjs';
+import { bestEffort, field, findingFiles, git, paths, read } from './state.mjs';
 import { ask, diffBlock, prompt } from './vendors/index.mjs';
 import { tail } from './vendors/proc.mjs';
 import { ensureMain, setupJob } from './worktree.mjs';
@@ -31,18 +31,10 @@ async function call(cfg, n, kind, entry, opts) {
   return r;
 }
 
-// The last round's findings: every file of that round matching `files` that did not pass.
-const findings = (cfg, n, round, files) => {
-  const prev = `${paths(cfg).jobs(n)}/round-${round - 1}`, parts = [];
-  if (round > 1 && existsSync(prev)) for (const f of readdirSync(prev).filter(f => files.test(f))) {
-    const body = read(`${prev}/${f}`);
-    if (!body.startsWith('VERDICT: PASS')) parts.push(`## ${f}\n${body.trim()}`);
-  }
-  return parts;
-};
+const findings = (cfg, n, round, match) => findingFiles(paths(cfg).jobs(n), round, match).map(f => `## ${basename(f)}\n${read(f).trim()}`);
 
 function feedback(cfg, n, round) {
-  const dir = paths(cfg).jobs(n), parts = findings(cfg, n, round, /^(review-.+|owner)\.md$/);
+  const dir = paths(cfg).jobs(n), parts = findings(cfg, n, round, f => /^(review-.+|owner)\.md$/.test(f));
   const b = read(`${dir}/build.md`);
   if (b.startsWith('BUILD: FAILED') && field(b, 'Round') === String(round)) parts.push(`## Last check output\n${b.trim()}`);
   return parts.length ? `\n\n# Fix these findings\n${parts.join('\n\n')}` : '';
@@ -122,7 +114,7 @@ export async function review(cfg, n, kind, entry, round) {
     writeFileSync(file, `VERDICT: PASS\nReviewer: skipped\nCommit: ${git(wt, 'rev-parse', 'HEAD').trim()}\n- ${t(cfg.language, 'note.uiReviewSkipped')}\n`);
     return { status: 'ok', note: 'VERDICT: PASS (skipped)' };
   }
-  const old = findings(cfg, n, round, /^review-.+\.md$/), vars = { spec, previous: old.length ? `# Previous round findings\n${old.join('\n\n')}` : '', diff: diffBlock(vendor, spec, git(wt, 'diff', `origin/${cfg.defaultBranch}...HEAD`)), images: images.length ? `# Screenshots\n${images.join('\n')}` : '' };
+  const old = findings(cfg, n, round, f => f === `review-${kind}.md`), vars = { spec, previous: old.length ? `# Previous round findings\n${old.join('\n\n')}` : '', diff: diffBlock(vendor, spec, git(wt, 'diff', `origin/${cfg.defaultBranch}...HEAD`)), images: images.length ? `# Screenshots\n${images.join('\n')}` : '' };
   return judge(cfg, n, kind, entry, { cwd: wt, file, verdicts: 'PASS|CHANGES', vars, images, commit: true });
 }
 

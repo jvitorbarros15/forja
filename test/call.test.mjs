@@ -717,6 +717,19 @@ test('a repo whose default branch is master: forja-main, job branches, checks, r
   assert.equal(create[create.indexOf('--base') + 1], 'master');
 });
 
+test('an external reviewer gets only the previous findings of its own kind; a kind that never ran gets none', async () => {
+  const E = mkEnv(FAKES), wt = job(E, 82), log = `${E.root}/calls.jsonl`;
+  put(`${wt}/src/a.js`, 'export const a = 2;\n');
+  await check(E.cfg, 82, 'codex:sol', 1);
+  put(`${E.J(82)}/round-1/review-code.md`, 'VERDICT: CHANGES\n- src/a.js:1: code finding.\n');
+  put(`${E.J(82)}/round-1/review-ponytail.md`, 'VERDICT: CHANGES\n- src/a.js:1: ponytail finding.\n');
+  const stdin = async kind => { await withEnv({ FAKE_LOG: log, FAKE_TEXT: 'VERDICT: PASS' }, () => review(E.cfg, 82, kind, 'codex:sol', 2)); return calls(log).at(-1).stdin; };
+  const p = await stdin('ponytail');
+  assert.match(p, /ponytail finding/);
+  assert.doesNotMatch(p, /code finding/);
+  assert.doesNotMatch(await stdin('security'), /^# Previous round findings$|code finding|ponytail finding/m);
+});
+
 test('from round 2 an external reviewer gets the previous findings and is told to verify only those', async () => {
   const E = mkEnv(FAKES), wt = job(E, 81), log = `${E.root}/calls.jsonl`;
   put(`${wt}/src/a.js`, 'export const a = 2;\n');

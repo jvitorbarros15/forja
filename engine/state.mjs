@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { gone } from './platform.mjs';
 
@@ -43,6 +43,12 @@ export function bestEffort(fn, tries = 3) {
   for (let i = 0; i < tries; i++) try { fn(); return true; } catch (e) { if (!/lock busy/.test(e?.message)) return false; }
   return false;
 }
+
+// The previous round's files that match and did not pass: what the next builder fixes and what a reviewer re-checks.
+export const findingFiles = (dir, round, match) => {
+  const prev = `${dir}/round-${round - 1}`;
+  return round > 1 && existsSync(prev) ? readdirSync(prev).filter(f => match(f) && !read(`${prev}/${f}`).startsWith('VERDICT: PASS')).map(f => `${prev}/${f}`) : [];
+};
 
 export const field = (text, key) => text.match(new RegExp(`^${key}:[ \\t]*(.*)$`, 'm'))?.[1].trim() || null;
 const run = (cmd, a) => execFileSync(cmd, a, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 256e6 });

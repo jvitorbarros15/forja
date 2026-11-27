@@ -835,6 +835,20 @@ test('an issue an approver did not label is not looked up again until GitHub say
   assert.deepEqual(JSON.parse(readFileSync(C.P.ignored, 'utf8')), {});
 });
 
+test('a round 2 reviewer is pointed only at the findings of its own kind; a kind that never ran reviews everything', () => {
+  const C = mkEnv(CLAUDE_ONLY);
+  put(`${C.J(9)}/build.md`, 'BUILD: OK\nExecutor: claude:sonnet\nUI: no\n');
+  put(`${C.J(9)}/round-1/review-code.md`, 'VERDICT: CHANGES\n- a.ts:1: bug. fix.\n');
+  put(`${C.J(9)}/round-1/review-ponytail.md`, 'VERDICT: CHANGES\n- b.ts:2: too much. cut.\n');
+  put(`${C.J(9)}/round-2/review-code.md`, 'VERDICT: PASS\n- ok\n');
+  const j = job({ issue: 9, stage: 'review', round: 2, tier: 'C', executor: 'medium', entry: 'claude:sonnet', reviews: { code: { verdict: 'pending' }, ponytail: { verdict: 'pending' }, security: { verdict: 'pending' } } });
+  const by = Object.fromEntries(C.T.stepFor(j, {}).do.map(d => [d.agent, d.prompt]));
+  assert.deepEqual(Object.keys(by), ['review-ponytail', 'review-security']);
+  assert.match(by['review-ponytail'], new RegExp(`Re-review: the previous round's findings are in ${C.J(9)}/round-1/review-ponytail\\.md\\. Verify only those`));
+  assert.doesNotMatch(by['review-ponytail'], /review-code/);
+  assert.doesNotMatch(by['review-security'], /Re-review|review-code|review-ponytail/);
+});
+
 test('from round 2 a claude reviewer is pointed at the previous findings, and only at the ones that did not pass', () => {
   const C = mkEnv(CLAUDE_ONLY);
   put(`${C.J(8)}/build.md`, 'BUILD: OK\nExecutor: claude:sonnet\nUI: no\n');
