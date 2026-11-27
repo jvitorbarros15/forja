@@ -166,7 +166,7 @@ A diff that touches `ui.paths` counts as a UI change. Screenshots are taken with
 }
 ```
 
-`commit.pattern` is a regex the builder's commit subject must match. `pr.bodyTemplate` takes `{issue}` and `{summary}`. `pr.mergeMethod` is `merge`, `squash` or `rebase` (default `squash`: one commit per PR on the default branch, with the PR title as its subject).
+`commit.pattern` is a regex the builder's commit subject must match. `pr.bodyTemplate` takes `{issue}` and `{summary}`. `pr.mergeMethod` is `merge`, `squash` or `rebase` (default `squash`: one commit per PR on the default branch, with the PR title as its subject). `pr.requireCi` (default `false`): a repo whose PR has no checks at all merges after Forja waited 3 minutes for them to appear; set `true` to wait for a check instead.
 
 ## Other keys
 

@@ -38,6 +38,17 @@ test('defaultBranch defaults to main and must be a plain branch name', () => {
   }
 });
 
+test('pr.requireCi defaults to false and must be a boolean', () => {
+  assert.equal(DEFAULTS.pr.requireCi, false);
+  for (const [value, ok] of [[true, true], [false, true], ['yes', false], [1, false]]) {
+    const dir = project({ ...base, pr: { requireCi: value } });
+    try {
+      if (ok) assert.equal(loadConfig(dir).pr.requireCi, value);
+      else assert.throws(() => loadConfig(dir), (e) => e.errors.some((s) => /pr\.requireCi/.test(s)), String(value));
+    } finally { cleanup(dir); }
+  }
+});
+
 test('pr.mergeMethod defaults to squash and accepts merge, squash and rebase only', () => {
   assert.equal(DEFAULTS.pr.mergeMethod, 'squash');
   for (const [value, ok] of [['squash', true], ['merge', true], ['rebase', true], ['fast-forward', false], ['', false], [1, false]]) {

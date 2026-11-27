@@ -448,6 +448,34 @@ test('nothing merges unless the PR head is the reviewed commit; the owner is ask
   assert.equal(T.stepFor(pr({ issue: 121, prHead: HEAD.slice(0, 20) }), {}).step, 'merge');
 });
 
+test('a repo without CI merges after the checks had three minutes to show up; pr.requireCi keeps waiting', () => {
+  rv(122);
+  const pr = o => job({ issue: 122, stage: 'pr', pr: 9, prState: 'open', ci: 'none', tier: 'A', reviews: R, stageSince: later(-4 * 60e3), prHeadAt: later(-4 * 60e3), ...o });
+  assert.equal(T.stepFor(pr(), {}).step, 'merge');
+  assert.deepEqual(T.stepFor(pr({ stageSince: later(-60e3) }), {}), { wait: 'ci' });
+  assert.deepEqual(T.stepFor(pr({ prHeadAt: later(-60e3) }), {}), { wait: 'ci' });
+  const strict = mkEnv({ ...CLAUDE_ONLY, pr: { requireCi: true } });
+  reviewed(strict, 122);
+  assert.deepEqual(strict.T.stepFor(pr(), {}), { wait: 'ci' });
+  assert.deepEqual(T.stepFor(pr({ ci: 'pending' }), {}), { wait: 'ci' });
+});
+
+test('an empty check rollup is recorded as none, and a new head restarts the grace period', () => {
+  const C = mkEnv(MULTI);
+  reviewed(C, 123);
+  put(C.P.board, { jobs: [job({ issue: 123, stage: 'pr', pr: 9, prState: 'open', reviews: R, tier: 'A', stageSince: later(-60 * 60e3), prHead: HEAD })] });
+  const view = oid => (...a) => (a[0] === 'issue' && a[1] === 'list' ? '[]' : a[0] === 'pr' && a[1] === 'view' ? JSON.stringify({ state: 'OPEN', statusCheckRollup: [], headRefOid: oid, comments: [] }) : '');
+  const board = () => JSON.parse(readFileSync(C.P.board, 'utf8')).jobs[0];
+  const same = createTick(C.cfg, { gh: view(HEAD) }).tick();
+  assert.equal(board().ci, 'none');
+  assert.equal(board().prHeadAt, undefined);
+  assert.deepEqual(same.steps.map(s => s.step), ['merge']);
+  const pushed = createTick(C.cfg, { gh: view('c'.repeat(40)) }).tick();
+  assert.equal(board().prHead, 'c'.repeat(40));
+  assert.ok(Date.now() - Date.parse(board().prHeadAt) < 60e3);
+  assert.deepEqual(pushed.waiting, [{ issue: 123, stage: 'pr', on: 'ci' }]);
+});
+
 test('nothing merges or gets approved unless the build that would merge was reviewed', () => {
   put(`${J(44)}/build.md`, 'BUILD: OK\nRound: 2\nCommit: abc1234 Add x\n');
   const j = job({ issue: 44, round: 2, stage: 'pr', pr: 9, prState: 'open', ci: 'pass', tier: 'B', reviews: R });

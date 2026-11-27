@@ -11,7 +11,7 @@ import { alive } from './platform.mjs';
 import { roles } from './registry.mjs';
 import { createBoard, field, gh as realGh, locked, paths, read, readJson, writeJson } from './state.mjs';
 
-const MIN = 60e3, HOUR = 3600e3, STALE = 2 * HOUR;
+const MIN = 60e3, HOUR = 3600e3, STALE = 2 * HOUR, NO_CI_WAIT = 3 * MIN;
 export const ID_RE = /^(\d{1,9}|[a-z0-9-]{1,40})$/i;
 const ACTION = { approve: 'approve', aprovar: 'approve', redo: 'redo', refazer: 'redo' };
 const CONSUMES = ['merge', 'open-pr', 'redo'];
@@ -57,9 +57,10 @@ export function limitReset(text, at = Date.now()) {
   return later(at, (ahead > 1435 ? 0 : ahead) + 1);
 }
 
+// No checks at all is 'none', not 'pending': a repo without CI must not wait forever (see NO_CI_WAIT).
 const ciOf = rollup => {
   const bad = ['FAILURE', 'ERROR', 'CANCELLED', 'TIMED_OUT', 'ACTION_REQUIRED', 'STARTUP_FAILURE'];
-  if (!rollup?.length) return 'pending';
+  if (!rollup?.length) return 'none';
   if (rollup.some(c => bad.includes(c.conclusion) || bad.includes(c.state))) return 'fail';
   if (rollup.some(c => (c.status && c.status !== 'COMPLETED') || ['PENDING', 'EXPECTED'].includes(c.state))) return 'pending';
   return 'pass';
@@ -114,6 +115,7 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
     const p = JSON.parse(gh('pr', 'view', String(job.pr), '-R', R, '--json', 'state,statusCheckRollup,comments,headRefOid'));
     const since = Math.max(Date.parse(job.prCmdAt ?? 0) || 0, Date.parse(job.stageSince ?? job.since ?? 0) || 0);
     job.prState = p.state.toLowerCase();
+    if (job.prHead !== p.headRefOid) job.prHeadAt = new Date(now()).toISOString();
     job.prHead = p.headRefOid;
     job.ci = ciOf(p.statusCheckRollup);
     const c = p.comments
@@ -255,6 +257,11 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
     const miss = want.filter(w => { const c = shaOf(read(`${rd}/review-${w}.md`)); return !sha || !c || !(c.startsWith(sha) || sha.startsWith(c)); });
     return miss.length ? L('need.buildNotReviewed', { kinds: miss.join(', ') }) : '';
   }
+
+  // A PR whose head has no checks at all passes once they had NO_CI_WAIT to appear (they start a moment after a push);
+  // pr.requireCi keeps waiting for a check instead.
+  const ciReady = job => job.ci === 'pass' || (job.ci === 'none' && !cfg.pr.requireCi
+    && now() - Math.max(Date.parse(job.stageSince ?? job.since ?? 0) || 0, Date.parse(job.prHeadAt ?? 0) || 0) >= NO_CI_WAIT);
 
   // The merge is pinned to the build that was reviewed: a head GitHub has that is not that commit was never reviewed.
   const headReviewed = job => (s => !!s && String(job.prHead ?? '').startsWith(s))(shaOf(read(`${J(job.issue)}/build.md`)));
@@ -424,7 +431,7 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
           s.do.unshift({ run: call('cilog', n, job.round, job.pr) });
           return s;
         }
-        if (job.ci !== 'pass') return wait('ci');
+        if (!ciReady(job)) return wait('ci');
         if (job.approved || job.prCmd?.cmd === 'approve' || mergesAlone(job)) {
           if (unreviewed(job)) return fail(job, L('need.mergeBlocked', { why: unreviewed(job) }), L('action.mergeBlocked'));
           return headReviewed(job) ? merge(job) : ask(job, L('need.headMoved', { pr: job.pr }), L('action.headMoved'));
@@ -532,7 +539,7 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
           const f = fresh.jobs.find(x => x.issue === j.issue);
           if (!f) continue;
           if (f.prState !== j.prState || f.ci !== j.ci) changed.add(f);
-          Object.assign(f, { prState: j.prState, ci: j.ci, prCmd: j.prCmd, prHead: j.prHead });
+          Object.assign(f, { prState: j.prState, ci: j.ci, prCmd: j.prCmd, prHead: j.prHead, prHeadAt: j.prHeadAt });
         }
         if (synced.length) writeJson(P.board, fresh);
         return [fresh, changed];
