@@ -6,11 +6,11 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { ConfigError, DEFAULTS, loadConfig } from './config.mjs';
+import { ConfigError, DEFAULTS, loadConfig, loadProjectConfig } from './config.mjs';
 import { t } from './i18n.mjs';
 import { IS_WIN, alive, killOne, killTree } from './platform.mjs';
 import { renderAgent, roles } from './registry.mjs';
-import { launch as realLaunch, loadCfg } from './runner.mjs';
+import { launch as realLaunch } from './runner.mjs';
 import { dashboardUrl } from './server.mjs';
 import { gh as realGh, git, read, readJson, writeJson } from './state.mjs';
 import { ensureMain } from './worktree.mjs';
@@ -251,7 +251,7 @@ async function doctor(project, o, L, out) {
   }
 
   let cfg = null;
-  try { cfg = loadCfg(project); add('ok', L('cli.doctor.config')); } catch (e) { add('FAIL', `${L('cli.doctor.configBad')}\n${e instanceof ConfigError ? e.errors.map(x => `  ${x}`).join('\n') : first(e)}`); }
+  try { cfg = loadProjectConfig(project); add('ok', L('cli.doctor.config')); } catch (e) { add('FAIL', `${L('cli.doctor.configBad')}\n${e instanceof ConfigError ? e.errors.map(x => `  ${x}`).join('\n') : first(e)}`); }
   const claudeBin = cfg?.vendors?.claude?.bin ?? 'claude';
   ok(!!resolveBin(claudeBin, project, env), L('cli.doctor.claude', { bin: claudeBin }), L('cli.doctor.claudeMissing', { bin: claudeBin }));
 
@@ -290,14 +290,14 @@ export async function run(argv, o = {}) {
   const args = [...argv], cmd = args[0], p = args.indexOf('--project');
   const project = fwd(path.resolve(p >= 0 ? args[p + 1] : process.cwd()));
   const out = { log: o.log ?? console.log, err: o.err ?? console.error };
-  const lang = (() => { try { return loadCfg(project).language; } catch { return 'en'; } })();
+  const lang = (() => { try { return loadProjectConfig(project).language; } catch { return 'en'; } })();
   const L = (k, v) => t(lang, k, v);
   if (cmd === 'detect') { out.log(JSON.stringify(await detect(project, o), null, 2)); return 0; }
   if (cmd === 'init') return init(project, args, o, L, out);
   if (cmd === 'doctor') return doctor(project, o, L, out);
   if (!['start', 'stop', 'status'].includes(cmd)) { out.err(L('cli.usage')); return 2; }
   let cfg;
-  try { cfg = loadCfg(project); } catch (e) { out.err(`${L('cli.doctor.configBad')}\n${e instanceof ConfigError ? e.errors.join('\n') : first(e)}`); return 1; }
+  try { cfg = loadProjectConfig(project); } catch (e) { out.err(`${L('cli.doctor.configBad')}\n${e instanceof ConfigError ? e.errors.join('\n') : first(e)}`); return 1; }
   if (cmd === 'start') return start(cfg, o, L, out);
   if (cmd === 'status') return status(cfg, L, out);
   stopNames(cfg, ['server', 'runner'], L, out.log);

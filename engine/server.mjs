@@ -10,7 +10,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { strings, t } from './i18n.mjs';
 import { alive } from './platform.mjs';
-import { loadCfg } from './runner.mjs';
+import { loadProjectConfig } from './config.mjs';
 import { locked, paths, read, readJson, writeJson } from './state.mjs';
 import { ID_RE } from './tick.mjs';
 import { chat } from './triage.mjs';
@@ -317,7 +317,7 @@ if (resolve(process.argv[1] ?? '').toLowerCase() === resolve(SELF).toLowerCase()
   const args = process.argv.slice(2), val = k => (args.includes(k) ? args[args.indexOf(k) + 1] : undefined);
   const project = val('--project') ?? process.cwd();
   try {
-    const cfg = loadCfg(project), s = await serve(cfg, { port: val('--port') === undefined ? undefined : Number(val('--port')), host: val('--host') });
+    const cfg = loadProjectConfig(project), s = await serve(cfg, { port: val('--port') === undefined ? undefined : Number(val('--port')), host: val('--host') });
     console.log(`Forja dashboard: ${dashboardUrl(cfg.paths.state)}`);
     for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => s.close().then(() => process.exit(0)));
   } catch (e) {

@@ -134,6 +134,10 @@ export function validateConfig(cfg) {
   return errors;
 }
 
+const worktreeRootOf = (project, configured) => (configured
+  ? fwd(path.resolve(project, configured))
+  : `${fwd(path.dirname(project))}/${path.basename(project)}-forja-wt`);
+
 export function loadConfig(projectDir, { mainDir, pluginRoot } = {}) {
   const project = fwd(path.resolve(projectDir));
   const file = path.join(mainDir ?? projectDir, '.forja', 'config.json');
@@ -145,9 +149,7 @@ export function loadConfig(projectDir, { mainDir, pluginRoot } = {}) {
   for (const k of Object.keys(cfg.reviewers ?? {})) cfg.models.review[k] ??= ['claude:sonnet'];
   const errors = validateConfig(cfg);
   if (errors.length) throw new ConfigError(errors);
-  const worktreeRoot = cfg.worktreeRoot
-    ? fwd(path.resolve(project, cfg.worktreeRoot))
-    : `${fwd(path.dirname(project))}/${path.basename(project)}-forja-wt`;
+  const worktreeRoot = worktreeRootOf(project, cfg.worktreeRoot);
   cfg.paths = {
     project,
     main: `${worktreeRoot}/forja-main`,
@@ -156,6 +158,16 @@ export function loadConfig(projectDir, { mainDir, pluginRoot } = {}) {
     plugin: fwd(path.resolve(pluginRoot ?? fileURLToPath(new URL('..', import.meta.url)))),
   };
   return cfg;
+}
+
+// The config every running part of Forja uses is the merged one: forja-main's .forja/config.json, which is what the repo
+// reviewed and merged. The checkout's own file counts only before forja-main exists (setup, the first run).
+// Where forja-main lives can only come from the checkout's file, read without validation.
+export function loadProjectConfig(projectDir, opts = {}) {
+  const project = fwd(path.resolve(projectDir));
+  let configured; try { configured = JSON.parse(fs.readFileSync(path.join(project, '.forja', 'config.json'), 'utf8')).worktreeRoot; } catch {}
+  const mainDir = `${worktreeRootOf(project, typeof configured === 'string' ? configured : undefined)}/forja-main`;
+  return loadConfig(projectDir, fs.existsSync(`${mainDir}/.forja/config.json`) ? { ...opts, mainDir } : opts);
 }
 
 const globRe = (g) => {

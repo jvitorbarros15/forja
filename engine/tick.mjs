@@ -4,7 +4,7 @@
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadConfig, reviewsFor, tierOf, tierRank } from './config.mjs';
+import { loadProjectConfig, reviewsFor, tierOf, tierRank } from './config.mjs';
 import { aliases, t } from './i18n.mjs';
 import { multiVendor, nextRung, parseEntry, pick, quota as readQuota } from './models.mjs';
 import { alive } from './platform.mjs';
@@ -534,8 +534,7 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
 
 if (resolve(process.argv[1] ?? '').toLowerCase() === resolve(fileURLToPath(import.meta.url)).toLowerCase()) {
   const args = process.argv.slice(2), p = args.indexOf('--project'), project = p >= 0 ? args.splice(p, 2)[1] : process.cwd();
-  let cfg = loadConfig(project);
-  if (existsSync(`${cfg.paths.main}/.forja/config.json`)) cfg = loadConfig(project, { mainDir: cfg.paths.main });
+  const cfg = loadProjectConfig(project);
   const T = createTick(cfg), [cmd, ...rest] = args;
   if (cmd === 'set') {
     const e = rest.indexOf('--event');

@@ -3,11 +3,10 @@
 //   node call.mjs --project <dir> <command> ...
 //   setup <n> | build <n> <entry> <round> | check <n> <entry> <round> | review <n> <kind> <entry> <round>
 //   goldfish <n> <entry> | pr <n> | deploy <id...> | deploy-test <id...> | cilog <n> <round> <pr> | triage <n> | log <vendor> <n> [kind]
-import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { check } from './checks.mjs';
-import { loadConfig } from './config.mjs';
+import { loadProjectConfig } from './config.mjs';
 import { build, goldfish, review } from './external.mjs';
 import { logCall } from './models.mjs';
 import { ciLog, deploy, deployTest, pr, runDeploy, tracked } from './ship.mjs';
@@ -20,8 +19,7 @@ const KIND = /^[\w-]+$/, ENTRY = /^[a-z]+:[\w.:-]+$/;
 
 export async function run(argv) {
   const args = [...argv], p = args.indexOf('--project'), project = p >= 0 ? args.splice(p, 2)[1] : process.cwd();
-  let cfg = loadConfig(project);
-  if (existsSync(`${cfg.paths.main}/.forja/config.json`)) cfg = loadConfig(project, { mainDir: cfg.paths.main });
+  const cfg = loadProjectConfig(project);
   const [cmd, n0, ...a] = args, n = int(n0);
   const done = res => { console.log(JSON.stringify(res)); return res.status === 'ok' ? 0 : res.status === 'limited' ? 3 : 1; };
   const step = (kind, fn, role = null, entry = null, round = 0) => tracked(cfg, n, kind, fn, { w: role && { role, model: entry, round } }).then(done);

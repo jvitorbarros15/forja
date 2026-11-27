@@ -279,3 +279,13 @@ test('a run step passes every argument to the program as it is, with no shell in
   assert.equal(bad.ok, false);
   assert.match(bad.note, /bg is not a node command/);
 });
+
+test('the runner follows the merged config in forja-main, not a broken checkout copy', async () => {
+  const E = mkEnv();
+  E.on((...a) => (a[0] === 'issue' && a[1] === 'list' ? '[]' : ''));
+  put(`${E.cfg.paths.main}/.forja/config.json`, CONFIG);
+  put(`${E.project}/.forja/config.json`, { ...CONFIG, approvers: [] });
+  assert.equal((await runCycle(E.project, E.opts)).error, null);
+  put(`${E.cfg.paths.main}/.forja/config.json`, { ...CONFIG, approvers: [] });
+  assert.match((await runCycle(E.project, E.opts)).error, /approvers/);
+});

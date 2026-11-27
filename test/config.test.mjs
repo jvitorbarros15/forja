@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { DEFAULTS, loadConfig, ConfigError, globMatch, reviewsFor, tierRank, highestTier, tierOf, PROTECTED } from '../engine/config.mjs';
+import { DEFAULTS, loadConfig, loadProjectConfig, ConfigError, globMatch, reviewsFor, tierRank, highestTier, tierOf, PROTECTED } from '../engine/config.mjs';
 
 function project(config, dir = fs.mkdtempSync(path.join(os.tmpdir(), 'forja-cfg-'))) {
   fs.mkdirSync(path.join(dir, '.forja'), { recursive: true });
@@ -151,4 +151,28 @@ test('agent roles must use claude entries', () => {
   try {
     assert.throws(() => loadConfig(dir), (e) => e.errors.some((s) => /models\.advisor.*claude/.test(s)) && e.errors.some((s) => /models\.spec.*claude/.test(s)));
   } finally { cleanup(dir); }
+});
+
+test('loadProjectConfig reads the checkout only until forja-main exists, then the merged config alone', () => {
+  const proj = project({ ...base, language: 'pt-BR' });
+  const wt = `${path.dirname(proj)}/${path.basename(proj)}-forja-wt`, main = `${wt}/forja-main`;
+  try {
+    assert.equal(loadProjectConfig(proj).language, 'pt-BR');
+    project({ repo: 'a/merged', approvers: ['me'] }, main);
+    fs.writeFileSync(path.join(proj, '.forja', 'config.json'), JSON.stringify({ ...base, approvers: [] }));
+    const cfg = loadProjectConfig(proj);
+    assert.deepEqual([cfg.repo, cfg.language, cfg.paths.main], ['a/merged', 'en', main.replace(/\\/g, '/')]);
+    fs.writeFileSync(path.join(proj, '.forja', 'config.json'), '{ not json');
+    assert.equal(loadProjectConfig(proj).repo, 'a/merged');
+    fs.writeFileSync(`${main}/.forja/config.json`, JSON.stringify({ ...base, approvers: [] }));
+    assert.throws(() => loadProjectConfig(proj), (e) => e instanceof ConfigError && e.errors.some((s) => /approvers/.test(s)));
+  } finally { cleanup(proj, wt); }
+});
+
+test('loadProjectConfig finds forja-main under a worktreeRoot the checkout sets', () => {
+  const proj = project({ ...base, worktreeRoot: '../elsewhere' }), root = `${path.dirname(proj)}/elsewhere`;
+  try {
+    project({ repo: 'a/merged', approvers: ['me'], worktreeRoot: '../elsewhere' }, `${root}/forja-main`);
+    assert.equal(loadProjectConfig(proj).repo, 'a/merged');
+  } finally { cleanup(proj, root); }
 });

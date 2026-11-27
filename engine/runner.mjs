@@ -6,7 +6,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ConfigError, loadConfig } from './config.mjs';
+import { ConfigError, loadProjectConfig } from './config.mjs';
 import { t } from './i18n.mjs';
 import { logCall } from './models.mjs';
 import { IS_WIN, alive, killTree, notify as platformNotify, spawnDetached } from './platform.mjs';
@@ -24,11 +24,6 @@ const stamp = (...a) => [new Date().toISOString().slice(11, 19), ...a].join(' ')
 const asJson = o => JSON.stringify(o);
 // What a step runs without the node and script path in front: "setup 5", "gh pr merge 9 ...".
 const label = a => (i => (i < 0 ? a : a.slice(i + 2)).join(' '))(a.indexOf('--project')).slice(0, 60);
-
-export function loadCfg(project) {
-  const cfg = loadConfig(project);
-  return existsSync(`${cfg.paths.main}/.forja/config.json`) ? loadConfig(project, { mainDir: cfg.paths.main }) : cfg;
-}
 
 export function makeCtx(cfg, o = {}) {
   const P = paths(cfg), state = cfg.paths.state, log = o.log ?? ((...a) => console.log(stamp(...a)));
@@ -347,7 +342,7 @@ export async function cycle(ctx) {
 // the dashboard reads for what each job waits on and the vendors' quota.
 export async function runCycle(project, o) {
   let error = null, t = null;
-  try { t = await cycle(makeCtx(loadCfg(project), o)); } catch (e) {
+  try { t = await cycle(makeCtx(loadProjectConfig(project), o)); } catch (e) {
     error = e instanceof ConfigError ? e.errors.join('; ').slice(0, 400) : first(e);
     (o.log ?? ((...a) => console.log(stamp(...a))))('cycle failed:', error);
   }
@@ -368,13 +363,13 @@ export async function run(argv, o = {}) {
   if (agent) {
     // An agent process has no console: its lines go to logs/agents.log.
     const log = o.log ?? ((...a) => { mkdirSync(dirname(logFile), { recursive: true }); appendFileSync(logFile, `${stamp(...a)}\n`); });
-    try { await agentMain(makeCtx(loadCfg(project), { ...base, log }), agent); return 0; } catch (e) { log(`agent ${agent}: ${e.message}`); return 1; }
+    try { await agentMain(makeCtx(loadProjectConfig(project), { ...base, log }), agent); return 0; } catch (e) { log(`agent ${agent}: ${e.message}`); return 1; }
   }
 
   const log = o.log ?? ((...a) => console.log(stamp(...a))), err = o.err ?? console.error;
   let release = () => {};
   if (!dry) {
-    let lang = 'en'; try { lang = loadCfg(project).language; } catch {}
+    let lang = 'en'; try { lang = loadProjectConfig(project).language; } catch {}
     try { release = acquireLock(`${stateDir(project)}/.runner.lock`, (k, v) => t(lang, k, v)); } catch (e) { err(e.message); return 1; }
   }
   const stop = () => process.exit(130);
