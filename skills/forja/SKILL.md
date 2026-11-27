@@ -7,7 +7,7 @@ description: How to use and customize Forja, the issue-to-PR software factory. U
 
 Forja turns a labeled GitHub issue into a spec, a build in its own worktree, reviews by a different model than the builder, an owner approval, a PR and a merge. The owner works from a local dashboard and PR comments (`/approve`, `/redo`).
 
-The engine never touches the user's working copy. It works in `<worktreeRoot>/forja-main` and `<worktreeRoot>/forja-<issue>`. Config and overrides load from `forja-main`, so only merged changes apply. Edit `.forja/config.json` in the repo, merge it to main, then run `/forja:doctor`.
+The engine never touches the user's working copy. It works in `<worktreeRoot>/forja-main` and `<worktreeRoot>/forja-<issue>`. Config and overrides load from `forja-main`, so only merged changes apply. Once `forja-main` exists, a missing `.forja/config.json` there is an error ("commit it and merge it to the default branch"); only `/forja:setup`, `/forja:doctor`, `/forja:status` and `/forja:stop` read the checkout's file. Edit `.forja/config.json` in the repo, merge it to main, then run `/forja:doctor`.
 
 ## Config file
 

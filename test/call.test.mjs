@@ -35,6 +35,7 @@ function mkEnv(config = {}) {
   const root = mkdtempSync(`${tmpdir()}/forja-call-`).replaceAll('\\', '/'), origin = `${root}/origin.git`, project = `${root}/proj`, br = config.defaultBranch ?? 'main';
   execFileSync('git', ['init', '-q', '--bare', '-b', br, origin]);
   for (const [f, c] of Object.entries(BASE)) put(`${project}/${f}`, c);
+  put(`${project}/.forja/config.json`, { repo: 'o/r', approvers: ['owner'], ...config });
   g(project, 'init', '-q', '-b', br);
   g(project, 'add', '-A');
   g(project, 'commit', '-qm', 'Add base');

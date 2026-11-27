@@ -210,6 +210,19 @@ test('loadProjectConfig reads the checkout only until forja-main exists, then th
   } finally { cleanup(proj, wt); }
 });
 
+test('once forja-main exists without a config, loadProjectConfig is an error that says to merge; fallback still reads the checkout', () => {
+  const proj = project({ ...base, language: 'pt-BR' });
+  const wt = `${path.dirname(proj)}/${path.basename(proj)}-forja-wt`, main = `${wt}/forja-main`;
+  try {
+    assert.equal(loadProjectConfig(proj).language, 'pt-BR');
+    fs.mkdirSync(main, { recursive: true });
+    assert.throws(() => loadProjectConfig(proj), (e) => e instanceof ConfigError && /merge it to the default branch/.test(e.errors[0]) && e.errors[0].includes(main.replace(/\\/g, '/')));
+    assert.equal(loadProjectConfig(proj, { fallback: true }).language, 'pt-BR');
+    project({ repo: 'a/merged', approvers: ['me'] }, main);
+    assert.equal(loadProjectConfig(proj).repo, 'a/merged');
+  } finally { cleanup(proj, wt); }
+});
+
 test('loadProjectConfig finds forja-main under a worktreeRoot the checkout sets', () => {
   const proj = project({ ...base, worktreeRoot: '../elsewhere' }), root = `${path.dirname(proj)}/elsewhere`;
   try {

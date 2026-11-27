@@ -65,6 +65,7 @@
   "need.mergeBlocked": "Merge blocked: {why}.",
   "need.outsidePaths": "The build changed files its tier does not allow. {why}",
   "action.outsidePaths": "A stronger executor would not fix this. Redo with a note that keeps the change inside the tier's paths, or raise the tier in the spec.",
+  "config.notMerged": ".forja/config.json is not in forja-main ({dir}) yet. Commit it and merge it to the default branch: Forja reads its config only from the merged branch.",
   "need.headMoved": "The head of PR #{pr} is not the commit Forja reviewed, so it was not merged.",
   "need.readyTier": "PR #{pr} is ready: checks, reviews, final approval and CI passed. It is tier {tier}, which only goes to main with your Approve.",
   "need.repeated": "{why} (twice in a row)",

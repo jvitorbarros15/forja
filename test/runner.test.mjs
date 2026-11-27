@@ -26,6 +26,7 @@ function mkEnv(config = CONFIG) {
   const root = mkdtempSync(`${tmpdir()}/forja-run-`).replaceAll('\\', '/'), origin = `${root}/origin.git`, project = `${root}/proj`, br = config.defaultBranch ?? 'main';
   execFileSync('git', ['init', '-q', '--bare', '-b', br, origin]);
   put(`${project}/README.md`, 'a\n');
+  put(`${project}/.forja/config.json`, config);
   g(project, 'init', '-q', '-b', br);
   g(project, 'add', '-A');
   g(project, 'commit', '-qm', 'Add base');
@@ -70,9 +71,6 @@ test('bad config is reported in heartbeat and cycle continues', async () => {
 
 test('a cycle reads the merged config: a changed forja-main is reset first, except while a deploy runs', async () => {
   const E = mkEnv();
-  g(E.project, 'add', '-f', '.forja/config.json');
-  g(E.project, 'commit', '-qm', 'Add forja config');
-  g(E.project, 'push', '-q', 'origin', 'main');
   ensureMain(E.cfg);
   E.on((...a) => (a[0] === 'issue' && a[1] === 'list' ? '[]' : ''));
   const file = `${E.cfg.paths.main}/.forja/config.json`, tampered = () => put(file, { ...CONFIG, approvers: [] });

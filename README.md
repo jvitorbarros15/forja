@@ -44,7 +44,7 @@ In Claude Code, inside any git repository with a GitHub remote:
 /forja:setup
 ```
 
-`/forja:setup` detects what is installed, asks before turning on optional vendors, and writes `.forja/config.json`. Commit that file and merge it to your default branch, then start the engine:
+`/forja:setup` detects what is installed, asks before turning on optional vendors, and writes `.forja/config.json`. Commit that file and merge it to your default branch, then start the engine. The runner reads its config only from the merged branch: `/forja:start` refuses to run, and `/forja:doctor` warns, until `.forja/config.json` is on the default branch.
 
 ```
 /forja:start

@@ -37,12 +37,12 @@ function mkRepo() {
   const root = tmp(), origin = `${root}/origin.git`, project = `${root}/proj`;
   execFileSync('git', ['init', '-q', '--bare', '-b', 'main', origin]);
   put(`${project}/README.md`, 'a\n');
+  put(`${project}/.forja/config.json`, { ...CONFIG, server: { port: 43100 + Math.floor(Math.random() * 800), host: '127.0.0.1' } });
   g(project, 'init', '-q', '-b', 'main');
   g(project, 'add', '-A');
   g(project, 'commit', '-qm', 'Add base');
   g(project, 'remote', 'add', 'origin', origin);
   g(project, 'push', '-q', '-u', 'origin', 'main');
-  put(`${project}/.forja/config.json`, { ...CONFIG, server: { port: 43100 + Math.floor(Math.random() * 800), host: '127.0.0.1' } });
   return { root, project };
 }
 
@@ -139,6 +139,7 @@ test('doctor passes with every tool present and fails on a missing check command
   H.o.env = { PATH: fakeBin(tmp(), 'git', 'gh', 'claude', 'node') };
   assert.equal(await run(['doctor', '--project', project], H.o), 0, H.text());
   assert.match(H.text(), /All required checks passed/);
+  assert.match(H.text(), /\[warn\] \.forja\/config\.json is not in forja-main/);
 
   put(`${project}/.forja/config.json`, { ...CONFIG, checks: { test: 'nonexistent-tool-xyz run' }, vendors: { codex: { enabled: true, bin: 'codex-missing' } } });
   const H2 = harness({ ghOut: () => '' });
@@ -179,6 +180,24 @@ test('detect works on a bare folder', async () => {
   assert.equal(await run(['detect', '--project', project], H.o), 0);
   const d = JSON.parse(H.logs.join('\n'));
   assert.deepEqual([d.repo, d.ghUser, d.ghScopes, d.scripts], [null, null, [], {}]);
+});
+
+test('start refuses to run until .forja/config.json is merged into forja-main, while status and stop still work', async () => {
+  const { root, project } = mkRepo(), H = harness(), config = readJson(`${project}/.forja/config.json`);
+  g(project, 'rm', '-q', '--cached', '.forja/config.json');
+  g(project, 'commit', '-qm', 'Remove config');
+  g(project, 'push', '-q', 'origin', 'main');
+  const launched = [];
+  H.o.launch = (ctx, argv) => { launched.push(argv); return spawnDetached(process.execPath, idle, { cwd: project }); };
+  try {
+    assert.equal(await run(['start', '--project', project], H.o), 1);
+    assert.match(H.text(), /not in forja-main/);
+    assert.match(H.text(), /merge it to the default branch/);
+    assert.equal(launched.length, 0);
+    assert.equal(await run(['status', '--project', project], harness().o), 0);
+    assert.equal(await run(['stop', '--project', project], harness().o), 0);
+    assert.deepEqual(readJson(`${project}/.forja/config.json`), config);
+  } finally { try { rmSync(root, { recursive: true, force: true }); } catch {} }
 });
 
 test('start launches server and runner, status reads them, stop kills only them', async () => {

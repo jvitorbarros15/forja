@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { languages } from './i18n.mjs';
+import { languages, t } from './i18n.mjs';
 
 export const PROTECTED = ['.forja/**', '.github/workflows/**', '.claude/**'];
 
@@ -164,7 +164,8 @@ export function loadConfig(projectDir, { mainDir, pluginRoot } = {}) {
 }
 
 // The config every running part of Forja uses is the merged one: forja-main's .forja/config.json, which is what the repo
-// reviewed and merged. The checkout's own file counts only before forja-main exists (setup, the first run).
+// reviewed and merged. The checkout's own file counts only before forja-main exists (setup, the first start) and where
+// `fallback` is set (doctor, status, stop), which must work before the merge.
 // Where forja-main lives can only come from the checkout's file, read without validation.
 export function mainDirOf(projectDir) {
   const project = fwd(path.resolve(projectDir));
@@ -172,9 +173,11 @@ export function mainDirOf(projectDir) {
   return `${worktreeRootOf(project, typeof configured === 'string' ? configured : undefined)}/forja-main`;
 }
 
-export function loadProjectConfig(projectDir, opts = {}) {
-  const mainDir = mainDirOf(projectDir);
-  return loadConfig(projectDir, fs.existsSync(`${mainDir}/.forja/config.json`) ? { ...opts, mainDir } : opts);
+export function loadProjectConfig(projectDir, { fallback = false, ...opts } = {}) {
+  const mainDir = mainDirOf(projectDir), merged = fs.existsSync(`${mainDir}/.forja/config.json`);
+  // Once forja-main exists the merged config is the only one: a checkout's own file must not stand in for a merge that has not happened.
+  if (!merged && !fallback && fs.existsSync(mainDir)) throw new ConfigError([t('en', 'config.notMerged', { dir: mainDir })]);
+  return loadConfig(projectDir, merged ? { ...opts, mainDir } : opts);
 }
 
 const globRe = (g) => {

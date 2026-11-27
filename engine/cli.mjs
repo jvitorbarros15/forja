@@ -200,6 +200,8 @@ async function start(cfg, o, L, out) {
     return 0;
   }
   try { ensureMain(cfg); } catch (e) { out.err(L('cli.startFailed', { why: first(e.stderr || e) })); return 1; }
+  // The runner reads config only from forja-main: refuse to start until the config is merged there.
+  try { cfg = loadProjectConfig(cfg.paths.project); } catch (e) { out.err(e instanceof ConfigError ? e.errors.join('\n') : first(e)); return 1; }
   stopNames(cfg, need, L, () => {});
   const launch = o.launch ?? realLaunch, ctx = { cfg, once: false }, proj = cfg.paths.project;
   const argv = { server: [SERVER, '--project', proj], runner: [RUNNER, '--project', proj, '--every', '15'] };
@@ -258,7 +260,11 @@ async function doctor(project, o, L, out) {
   }
 
   let cfg = null;
-  try { cfg = loadProjectConfig(project); add('ok', L('cli.doctor.config')); } catch (e) { add('FAIL', `${L('cli.doctor.configBad')}\n${e instanceof ConfigError ? e.errors.map(x => `  ${x}`).join('\n') : first(e)}`); }
+  try {
+    cfg = loadProjectConfig(project, { fallback: true });
+    add('ok', L('cli.doctor.config'));
+    if (!existsSync(`${cfg.paths.main}/.forja/config.json`)) add('warn', L('config.notMerged', { dir: cfg.paths.main }));
+  } catch (e) { add('FAIL', `${L('cli.doctor.configBad')}\n${e instanceof ConfigError ? e.errors.map(x => `  ${x}`).join('\n') : first(e)}`); }
   const claudeBin = claudeBinOf(cfg ?? {}, env);
   ok(!!resolveBin(claudeBin, project, env), L('cli.doctor.claude', { bin: claudeBin }), L('cli.doctor.claudeMissing', { bin: claudeBin }));
 
@@ -297,14 +303,14 @@ export async function run(argv, o = {}) {
   const args = [...argv], cmd = args[0], p = args.indexOf('--project');
   const project = fwd(path.resolve(p >= 0 ? args[p + 1] : process.cwd()));
   const out = { log: o.log ?? console.log, err: o.err ?? console.error };
-  const lang = (() => { try { return loadProjectConfig(project).language; } catch { return 'en'; } })();
+  const lang = (() => { try { return loadProjectConfig(project, { fallback: true }).language; } catch { return 'en'; } })();
   const L = (k, v) => t(lang, k, v);
   if (cmd === 'detect') { out.log(JSON.stringify(await detect(project, o), null, 2)); return 0; }
   if (cmd === 'init') return init(project, args, o, L, out);
   if (cmd === 'doctor') return doctor(project, o, L, out);
   if (!['start', 'stop', 'status'].includes(cmd)) { out.err(L('cli.usage')); return 2; }
   let cfg;
-  try { cfg = loadProjectConfig(project); } catch (e) { out.err(`${L('cli.doctor.configBad')}\n${e instanceof ConfigError ? e.errors.join('\n') : first(e)}`); return 1; }
+  try { cfg = loadProjectConfig(project, { fallback: true }); } catch (e) { out.err(`${L('cli.doctor.configBad')}\n${e instanceof ConfigError ? e.errors.join('\n') : first(e)}`); return 1; }
   if (cmd === 'start') return start(cfg, o, L, out);
   if (cmd === 'status') return status(cfg, L, out);
   stopNames(cfg, ['server', 'runner'], L, out.log);
