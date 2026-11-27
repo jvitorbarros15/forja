@@ -133,7 +133,7 @@ function init(project, args, o, L, out) {
   writeFileSync(file, `${JSON.stringify(min, null, 2)}\n`);
   out.log(L('cli.initWrote', { file: fwd(file) }));
   const ignore = `${project}/.gitignore`, text = read(ignore);
-  if (!text.split(/\r?\n/).some(l => ['.forja/state', '.forja/state/'].includes(l.trim()))) {
+  if (!text.split(/\r?\n/).some(l => ['.forja/state', '.forja/state/'].includes(l.trim().replace(/^\//, '')))) {
     appendFileSync(ignore, `${text && !text.endsWith('\n') ? '\n' : ''}.forja/state/\n`);
     out.log(L('cli.initIgnore'));
   }

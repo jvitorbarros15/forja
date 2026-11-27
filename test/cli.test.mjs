@@ -72,6 +72,15 @@ test('init writes minimal config and gitignore line', async () => {
   assert.equal(readFileSync(`${project}/.gitignore`, 'utf8'), 'node_modules/\n.forja/state/\n');
 });
 
+test('init recognizes an existing rooted ignore line for the state folder', async () => {
+  for (const line of ['/.forja/state/', '/.forja/state', '.forja/state']) {
+    const { project } = mkProject(null), H = harness();
+    put(`${project}/.gitignore`, `node_modules/\n${line}\n`);
+    assert.equal(await run(['init', '--project', project, '--answers', JSON.stringify(ANSWERS), '--no-gh'], H.o), 0);
+    assert.equal(readFileSync(`${project}/.gitignore`, 'utf8'), `node_modules/\n${line}\n`, line);
+  }
+});
+
 test('init writes defaultBranch only when it is not main', async () => {
   const { project } = mkProject(null), H = harness();
   assert.equal(await run(['init', '--project', project, '--answers', JSON.stringify({ ...ANSWERS, defaultBranch: 'master' }), '--no-gh'], H.o), 0);
