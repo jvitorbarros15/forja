@@ -38,6 +38,19 @@ test('defaultBranch defaults to main and must be a plain branch name', () => {
   }
 });
 
+test('pr.mergeMethod defaults to squash and accepts merge, squash and rebase only', () => {
+  assert.equal(DEFAULTS.pr.mergeMethod, 'squash');
+  for (const [value, ok] of [['squash', true], ['merge', true], ['rebase', true], ['fast-forward', false], ['', false], [1, false]]) {
+    const dir = project({ ...base, pr: { mergeMethod: value } });
+    try {
+      if (ok) assert.equal(loadConfig(dir).pr.mergeMethod, value);
+      else assert.throws(() => loadConfig(dir), (e) => e.errors.some((s) => /pr\.mergeMethod/.test(s)), String(value));
+    } finally { cleanup(dir); }
+  }
+  const dir = project({ ...base, pr: { bodyTemplate: 'x {issue}' } });
+  try { assert.equal(loadConfig(dir).pr.mergeMethod, 'squash'); } finally { cleanup(dir); }
+});
+
 test('user config merges objects and replaces arrays', () => {
   const dir = project({ ...base, models: { spec: ['claude:opus'] }, queue: { max: 5 } });
   try {

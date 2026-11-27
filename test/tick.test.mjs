@@ -800,3 +800,15 @@ test('from round 2 a claude reviewer is pointed at the previous findings, and on
   assert.doesNotMatch(prompt(2), /review-ponytail/);
   assert.doesNotMatch(prompt(1), /Re-review/);
 });
+
+test('the merge uses pr.mergeMethod (squash by default), keeps the head pin and deletes the branch', () => {
+  const sha = 'b'.repeat(40), pr = { stage: 'pr', pr: 9, prState: 'open', ci: 'pass', tier: 'A', prHead: sha, reviews: R };
+  for (const [config, flag] of [[CLAUDE_ONLY, '--squash'], [{ ...CLAUDE_ONLY, pr: { mergeMethod: 'rebase' } }, '--rebase'], [{ ...CLAUDE_ONLY, pr: { mergeMethod: 'merge' } }, '--merge']]) {
+    const C = mkEnv(config);
+    put(`${C.J(19)}/build.md`, 'BUILD: OK\nRound: 1\nCommit: abc1234 Add x\n');
+    put(`${C.J(19)}/round-1/review-code.md`, 'VERDICT: PASS\nCommit: abc1234def\n');
+    const s = C.T.stepFor(job({ issue: 19, ...pr }), {});
+    assert.equal(s.step, 'merge');
+    assert.equal(sh(s.do[0]), `gh pr merge 9 -R o/r ${flag} --delete-branch --match-head-commit ${sha}`);
+  }
+});

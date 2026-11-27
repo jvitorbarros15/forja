@@ -211,7 +211,7 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
   };
 
   // Pinned to the head whose CI this tick read: a push after that makes gh refuse the merge.
-  const merge = job => ({ step: 'merge', after: true, set: { stage: 'merged' }, do: [{ run: ['gh', 'pr', 'merge', String(job.pr), '-R', R, '--merge', '--delete-branch', ...(/^[0-9a-f]{40}$/.test(job.prHead ?? '') ? ['--match-head-commit', job.prHead] : [])] }], event: L('event.mergeDone') });
+  const merge = job => ({ step: 'merge', after: true, set: { stage: 'merged' }, do: [{ run: ['gh', 'pr', 'merge', String(job.pr), '-R', R, `--${cfg.pr.mergeMethod}`, '--delete-branch', ...(/^[0-9a-f]{40}$/.test(job.prHead ?? '') ? ['--match-head-commit', job.prHead] : [])] }], event: L('event.mergeDone') });
   const openPr = (job, approved) => ({
     step: 'open-pr', after: true, set: { stage: 'pr', running: [], ...(approved ? { approved: true, paused: false, retryAt: null } : {}) }, do: [{ run: call('pr', job.issue), sets: 'pr' }],
     event: approved ? L('event.approvedOpenPr') : mergesAlone(job) ? L('event.openPrAuto') : L('event.openPrManual', { tier: job.tier }),

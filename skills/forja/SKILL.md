@@ -162,16 +162,17 @@ A diff that touches `ui.paths` counts as a UI change. Screenshots are taken with
 ```json
 {
   "commit": { "pattern": "^(Add|Fix|Update) .*[^.]$", "guidance": "Imperative verb, sentence case, no period." },
-  "pr": { "bodyTemplate": "Closes #{issue}\n\n{summary}" }
+  "pr": { "bodyTemplate": "Closes #{issue}\n\n{summary}", "mergeMethod": "squash" }
 }
 ```
 
-`commit.pattern` is a regex the builder's commit subject must match. `pr.bodyTemplate` takes `{issue}` and `{summary}`.
+`commit.pattern` is a regex the builder's commit subject must match. `pr.bodyTemplate` takes `{issue}` and `{summary}`. `pr.mergeMethod` is `merge`, `squash` or `rebase` (default `squash`: one commit per PR on the default branch, with the PR title as its subject).
 
 ## Other keys
 
 - `approvers`: logins allowed to label issues and run `/approve` or `/redo`.
 - `language`: `en` or `pt-BR`. Strings shown to people come from `engine/i18n/<lang>.json`.
+- `defaultBranch`: the branch every change merges into. Default `main`; `/forja:setup` detects it.
 - `intakeLabel`: the label that starts a job. Default `forja`.
 - `queue.max`: how many jobs build at once. Default `3`.
 - `limits.rounds`: review rounds before a job goes to `needs-you`. Default `3`.

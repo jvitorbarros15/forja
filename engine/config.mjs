@@ -45,7 +45,7 @@ export const DEFAULTS = {
   reviewers: {},
   privacy: { denyRead: ['**/.env*'], promptRules: [] },
   commit: { pattern: '^(Add|Fix|Update|Remove|Move|Refactor|Improve) .*[^.]$', guidance: 'Imperative verb, sentence case, no period.' },
-  pr: { bodyTemplate: 'Closes #{issue}\n\n{summary}' },
+  pr: { bodyTemplate: 'Closes #{issue}\n\n{summary}', mergeMethod: 'squash' },
   queue: { max: 3 },
   notify: { desktop: true },
   limits: { rounds: 3, agentTimeoutMin: 60 },
@@ -130,6 +130,7 @@ export function validateConfig(cfg) {
     }
   }
   try { new RegExp(cfg.commit?.pattern); } catch { errors.push('commit.pattern is not a valid regex'); }
+  if (!['merge', 'squash', 'rebase'].includes(cfg.pr?.mergeMethod)) errors.push('pr.mergeMethod must be "merge", "squash" or "rebase"');
   if (!Number.isInteger(cfg.queue?.max) || cfg.queue.max < 1) errors.push('queue.max must be a positive integer');
   if (!Number.isInteger(cfg.limits?.rounds) || cfg.limits.rounds < 1) errors.push('limits.rounds must be a positive integer');
   if (!Number.isInteger(cfg.server?.port) || cfg.server.port < 1 || cfg.server.port > 65535) errors.push('server.port must be a valid port');
