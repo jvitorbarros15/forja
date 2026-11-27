@@ -121,11 +121,12 @@ test('check fails when tier A diff leaves its paths', async () => {
   const b = rd(`${E.J(2)}/build.md`);
   assert.match(b, /^BUILD: FAILED\nExecutor: codex:sol\nRound: 1\nCommit: -\n/);
   assert.match(b, /Tier A may only change files matching[\s\S]*src\/x\.js/);
+  assert.match(b, /^Outside: yes$/m);
   assert.equal(g(wt, 'rev-list', '--count', 'origin/main..HEAD').trim(), '0');
   rmSync(`${wt}/src/x.js`);
   put(`${wt}/docs/new.md`, 'new\n');
   await check(E.cfg, 2, 'codex:sol', 1);
-  assert.match(rd(`${E.J(2)}/build.md`), /^BUILD: OK\nExecutor: codex:sol\nRound: 1\nCommit: [0-9a-f]+ Add job 2\nUI: no\nProtected: no\n/);
+  assert.match(rd(`${E.J(2)}/build.md`), /^BUILD: OK\nExecutor: codex:sol\nRound: 1\nCommit: [0-9a-f]+ Add job 2\nUI: no\nProtected: no\nOutside: no\n/);
   assert.equal(g(wt, 'log', '-1', '--format=%s').trim(), 'Add job 2');
 });
 

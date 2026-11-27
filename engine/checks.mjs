@@ -117,7 +117,7 @@ export async function check(cfg, n, exec, round, failed = '') {
   // The executor's closing message, so the approver sees what it says it did; the checks above are what counts.
   const vendor = exec.split(':')[0], said = vendor === 'local' ? '' : read(`${dir}/${vendor === 'claude' ? 'builder.md' : '.last-build.txt'}`).replace(/^\W*(DONE|STUCK)\b\W*/i, '').trim().split('\n').slice(-12).join('\n').slice(-1500);
   writeFileSync(`${dir}/build.md`, [
-    `BUILD: ${notes ? 'FAILED' : 'OK'}`, `Executor: ${exec}`, `Round: ${round}`, `Commit: ${commit}`, `UI: ${ui ? 'yes' : 'no'}`, `Protected: ${prot ? 'yes' : 'no'}`,
+    `BUILD: ${notes ? 'FAILED' : 'OK'}`, `Executor: ${exec}`, `Round: ${round}`, `Commit: ${commit}`, `UI: ${ui ? 'yes' : 'no'}`, `Protected: ${prot ? 'yes' : 'no'}`, `Outside: ${outside.length ? 'yes' : 'no'}`,
     `Files: ${stat.join(', ') || '-'}`, `Checks: typecheck ${out.typecheck}; test ${out.test}; build ${out.build}; ui ${out.ui}`, 'Notes:', notes || '-',
     'Builder notes (the executor\'s own words, unverified):', said || '-', '',
   ].join('\n'));

@@ -835,6 +835,16 @@ test('an issue an approver did not label is not looked up again until GitHub say
   assert.deepEqual(JSON.parse(readFileSync(C.P.ignored, 'utf8')), {});
 });
 
+test('a build that left the paths of its tier goes to the owner instead of climbing the executor ladder', () => {
+  put(`${J(130)}/build.md`, 'BUILD: FAILED\nExecutor: claude:haiku\nRound: 1\nOutside: yes\nNotes:\nTier A may only change files matching docs/**; this changes src/x.js.\n');
+  const s = T.stepFor(job({ issue: 130, stage: 'build', tier: 'A' }), {});
+  assert.equal(s.step, 'escalate');
+  assert.equal(s.set.stage, 'needs-you');
+  assert.equal(s.set.note, t('en', 'need.outsidePaths', { why: 'Tier A may only change files matching docs/**; this changes src/x.js.' }));
+  put(`${J(131)}/build.md`, 'BUILD: FAILED\nExecutor: claude:haiku\nRound: 1\nOutside: no\nNotes:\ntest failed\n');
+  assert.equal(T.stepFor(job({ issue: 131, stage: 'build', tier: 'A' }), {}).step, 'build-retry');
+});
+
 test('a round 2 reviewer is pointed only at the findings of its own kind; a kind that never ran reviews everything', () => {
   const C = mkEnv(CLAUDE_ONLY);
   put(`${C.J(9)}/build.md`, 'BUILD: OK\nExecutor: claude:sonnet\nUI: no\n');

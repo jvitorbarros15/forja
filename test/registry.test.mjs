@@ -143,7 +143,8 @@ test('renderAgent fills the placeholders from the config', () => {
   const spec = renderAgent(cfg, roles(cfg).spec).body;
   assert.ok(spec.includes('- Never print customer ids.'));
   assert.ok(spec.includes('Never read files matching: **/.env*'));
-  assert.ok(spec.includes(`- B: ${cfg.tiers[1].describe}`));
+  assert.ok(spec.includes(`- B: ${cfg.tiers[1].describe} [approval: owner]`));
+  assert.ok(spec.includes(`- A: ${cfg.tiers[0].describe} [paths: ${cfg.tiers[0].paths.join(', ')}; approval: owner]`));
   assert.ok(spec.includes('pt-BR'));
   assert.ok(renderAgent(cfg, roles(cfg).builder).body.includes('- test: make test'));
   assert.ok(renderAgent(cfg, roles(cfg).approver).body.includes(cfg.commit.guidance));

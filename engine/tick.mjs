@@ -356,6 +356,8 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
             const agents = d.filter(x => x.agent).map(x => ROLES[x.agent].slot);
             return { step: 'review', set: { stage: 'review', reviews: Object.fromEntries(want.map(k => [k, { verdict: 'pending' }])), running: agents }, do: d, event: L(want.length > first.length ? 'event.reviewStartLater' : 'event.reviewStart', { kinds: first.join(', ') }) };
           }
+          // A diff outside its tier's paths is not something a stronger executor fixes: the spec's tier or the paths are what is wrong.
+          if (field(b, 'Outside') === 'yes') return ask(job, L('need.outsidePaths', { why: (b.split('Notes:\n')[1] ?? '').split('\n')[0] }), L('action.outsidePaths'));
           const fails = (job.fails ?? 0) + 1, rung = fails < 2 ? job.executor : nextRung(cfg, job.executor);
           if (!rung) return fail(job, L('need.checksAllFail'), L('action.checksAllFail'));
           return buildStep('build-retry', job, { fails: fails < 2 ? fails : 0, executor: rung }, L(fails < 2 ? 'event.checksRetry' : 'event.checksEscalate', { executor: rung }), q);

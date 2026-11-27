@@ -62,6 +62,8 @@
   "need.ciFailed": "O CI do PR #{pr} falhou.",
   "need.ciFailedRounds": "O CI do PR #{pr} falhou depois de {rounds} rodadas.",
   "need.mergeBlocked": "Merge bloqueado: {why}.",
+  "need.outsidePaths": "A construção mudou arquivos que o nível dela não permite. {why}",
+  "action.outsidePaths": "Um executor mais forte não resolve isto. Refazer com uma nota que mantenha a mudança dentro dos caminhos do nível, ou subir o nível na especificação.",
   "need.headMoved": "A ponta do PR #{pr} não é o commit que a Forja revisou, então não foi feito o merge.",
   "need.readyTier": "O PR #{pr} está pronto: checagens, revisões, aprovação final e CI passaram. É nível {tier}, que só entra na main com o seu Aprovar.",
   "need.repeated": "{why} (duas vezes seguidas)",

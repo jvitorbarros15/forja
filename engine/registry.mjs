@@ -63,7 +63,7 @@ export function renderAgent(cfg, role, homeDir = os.homedir()) {
   const checks = setChecks(cfg, role.checks);
   const fill = {
     privacyRules: [...cfg.privacy.promptRules.map((r) => `- ${r}`), ...(cfg.privacy.denyRead.length ? [`- Never read files matching: ${cfg.privacy.denyRead.join(', ')}`] : [])].join('\n'),
-    tiers: cfg.tiers.map((t) => `- ${t.id}: ${t.describe}`).join('\n'),
+    tiers: cfg.tiers.map((t) => `- ${t.id}: ${t.describe} [${t.paths?.length ? `paths: ${t.paths.join(', ')}; ` : ''}approval: ${t.approval}]`).join('\n'),
     checks: checks.length ? checks.map(([n, c]) => `- ${n}: ${c}`).join('\n') : '- none: you run no commands',
     commitGuidance: `${cfg.commit.guidance} Subjects must match ${cfg.commit.pattern}`,
     language: cfg.language,

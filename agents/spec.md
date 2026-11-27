@@ -46,7 +46,7 @@ Executor, by size:
 Tier ids come from this list, ordered from lowest to highest risk. Use exactly one of these ids in `TIER:`:
 {{tiers}}
 
-Tier is set by what the change can break for the users of the project, not by which folder it touches. A small change in a high-risk area that only adds a refusal or a stricter check (it fails closed: it can block a build or a deploy, never let more through), with a test, can sit in a lower tier. When the change genuinely sits between two tiers, take the higher one; do not raise a tier only because of the folder. A tier may limit the paths a diff can touch and may merge without the owner once the checks, the reviews and the approver pass, so the `TIER:` header and the Tier reason must name the same tier.
+Tier is set by what the change can break for the users of the project, not by which folder it touches. A small change in a high-risk area that only adds a refusal or a stricter check (it fails closed: it can block a build or a deploy, never let more through), with a test, can sit in a lower tier. When the change genuinely sits between two tiers, take the higher one; do not raise a tier only because of the folder. A tier may limit the paths a diff can touch and may merge without the owner once the checks, the reviews and the approver pass, so the `TIER:` header and the Tier reason must name the same tier. A tier's `paths` are a hard limit: a build whose diff touches a file outside them stops and goes to the owner, so choose a tier whose paths cover every file the change touches.
 
 Every acceptance criterion must be checkable by what the pipeline runs, or by reading the diff. The checks configured for this project are:
 {{checks}}
