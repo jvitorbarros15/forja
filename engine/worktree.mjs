@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, lstatSync, unlinkSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { t } from './i18n.mjs';
 import { linkDir } from './platform.mjs';
 import { field, git, paths, read } from './state.mjs';
@@ -25,13 +25,32 @@ const install = (cfg, dir) => {
   if (r.status) throw new Error(tail(r.stderr || r.stdout, 10));
 };
 
+const DEPS = /(^|\/)(package\.json|package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb)$/;
+
+// The marker holds the commit whose dependencies are installed in forja-main. It lives outside the worktree, and a failed
+// install removes it, so the next call tries again.
+function syncDeps(cfg) {
+  const { main, worktreeRoot } = cfg.paths, marker = `${worktreeRoot}/forja-main.installed`, head = git(main, 'rev-parse', 'HEAD').trim();
+  if (!cfg.checks.install) return;
+  const done = existsSync(marker) ? read(marker).trim() : '';
+  let stale = !done || (existsSync(`${main}/package.json`) && !existsSync(`${main}/node_modules`));
+  if (!stale && done !== head) {
+    try { stale = git(main, 'diff', '--name-only', done, head).split('\n').some(f => DEPS.test(f)); } catch { stale = true; }
+  }
+  if (!stale) return writeFileSync(marker, head);
+  rmSync(marker, { force: true });
+  install(cfg, main);
+  mkdirSync(worktreeRoot, { recursive: true });
+  writeFileSync(marker, head);
+}
+
 // forja-main only ever fast-forwards to origin/main. Nothing is run in the project checkout but fetch and worktree add.
 export function ensureMain(cfg) {
   const { project, main } = cfg.paths;
   git(project, 'fetch', '-q', 'origin', 'main');
-  if (existsSync(main)) return git(main, 'merge', '-q', '--ff-only', 'origin/main');
-  git(project, 'worktree', 'add', '-q', '--detach', main, 'origin/main');
-  if (cfg.checks.install) install(cfg, main);
+  if (existsSync(main)) git(main, 'merge', '-q', '--ff-only', 'origin/main');
+  else git(project, 'worktree', 'add', '-q', '--detach', main, 'origin/main');
+  syncDeps(cfg);
 }
 
 const link = (cfg, wt) => {

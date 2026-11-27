@@ -68,7 +68,8 @@ async function verifyUi(cfg, n, round, spec) {
 // A failing command always leaves a note, even when it printed nothing: an empty note would read as a pass.
 const failure = (L, name, r) => [L('check.cmdFailed', { name, code: r.status }), tail(`${r.stdout}${r.stderr}`)].filter(Boolean).join('\n');
 
-const changedFiles = (wt, base) => [...git(wt, 'diff', '--name-only', '--no-renames', base).split('\n'), ...git(wt, 'ls-files', '--others', '--exclude-standard').split('\n')]
+// -z: git quotes non-ASCII names otherwise, and the globs would miss them.
+const changedFiles = (wt, base) => [...git(wt, 'diff', '--name-only', '-z', '--no-renames', base).split('\0'), ...git(wt, 'ls-files', '--others', '--exclude-standard', '-z').split('\0')]
   .filter(f => f && !(linked(wt) && /^node_modules(\/|$)/.test(f)));
 
 // The orchestrator's own checks; a model's "done" never counts. Commits only when everything passes.
@@ -98,7 +99,7 @@ export async function check(cfg, n, exec, round, failed = '') {
   }
   let commit = '-';
   if (!notes) {
-    const first = git(wt, 'rev-list', '--count', 'origin/main..HEAD').trim() === '0', msg = first ? field(spec, 'COMMIT') : `Fix review notes for #${n}`;
+    const msg = field(spec, 'COMMIT');
     if (!new RegExp(cfg.commit.pattern).test(msg ?? '')) notes = L('check.badCommit', { pattern: cfg.commit.pattern, subject: msg });
     else {
       git(wt, 'add', '-A', ...(linked(wt) ? ['--', '.', ':(exclude)node_modules'] : []));

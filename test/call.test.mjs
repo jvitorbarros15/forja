@@ -528,3 +528,49 @@ test('check commands substitute {project} and {main}', async () => {
   rmSync(`${E.project}/secret.txt`);
   assert.throws(() => deploy(E.cfg, [71]), /secret\.txt/);
 });
+
+test('git quotes no paths: accented names still match PROTECTED and ui.paths', async () => {
+  const E = mkEnv({ ui: { paths: ['web/**'], serve: 'node serve.js', verify: 'node -e "0"' } }), wt = job(E, 72);
+  put(`${wt}/.forja/é.json`, '{}\n');
+  put(`${wt}/web/ação.html`, '<p>x</p>\n');
+  await check(E.cfg, 72, 'claude:sonnet', 1);
+  assert.match(rd(`${E.J(72)}/build.md`), /Protected: yes/);
+  assert.match(rd(`${E.J(72)}/build.md`), /UI: yes/);
+  const F = mkEnv({ ui: { paths: ['web/**'], serve: 'node serve.js', verify: 'node -e "0"' } }), wf = job(F, 73);
+  put(`${wf}/web/ação.html`, '<p>x</p>\n');
+  await check(F.cfg, 73, 'claude:sonnet', 1);
+  assert.match(rd(`${F.J(73)}/build.md`), /UI: yes[\s\S]*Protected: no|Protected: no[\s\S]*UI: yes/);
+});
+
+test('forja-main retries a failed install and reinstalls after a dependency file changes', () => {
+  const E = mkEnv({ checks: { install: `node -e "const f=require('fs');f.readFileSync('{project}/ok.txt');f.appendFileSync('{project}/runs.log','x')"` } });
+  const runs = () => (existsSync(`${E.project}/runs.log`) ? rd(`${E.project}/runs.log`).length : 0);
+  assert.throws(() => ensureMain(E.cfg), /ok\.txt/);
+  assert.equal(runs(), 0);
+  put(`${E.project}/ok.txt`, 'y');
+  ensureMain(E.cfg);
+  assert.equal(runs(), 1);
+  ensureMain(E.cfg);
+  E.pushOrigin('docs/other.md', 'x\n');
+  ensureMain(E.cfg);
+  assert.equal(runs(), 1);
+  E.pushOrigin('package-lock.json', '{}\n');
+  ensureMain(E.cfg);
+  assert.equal(runs(), 2);
+  rmSync(`${E.project}/ok.txt`);
+  E.pushOrigin('sub/yarn.lock', 'x\n');
+  assert.throws(() => ensureMain(E.cfg), /ok\.txt/);
+  put(`${E.project}/ok.txt`, 'y');
+  ensureMain(E.cfg);
+  assert.equal(runs(), 3);
+});
+
+test('later rounds reuse the spec subject, so a custom commit pattern keeps passing', async () => {
+  const E = mkEnv({ commit: { pattern: '^[A-Z]+-\\d+ .+$' } }), wt = job(E, 74, SPEC(74).replace('COMMIT: Add job 74', 'COMMIT: ABC-1 do the thing'));
+  put(`${wt}/src/a.js`, 'export const a = 2;\n');
+  await check(E.cfg, 74, 'claude:sonnet', 1);
+  put(`${wt}/src/a.js`, 'export const a = 3;\n');
+  await check(E.cfg, 74, 'claude:sonnet', 2);
+  assert.match(rd(`${E.J(74)}/build.md`), /^BUILD: OK\nExecutor: claude:sonnet\nRound: 2\nCommit: [0-9a-f]+ ABC-1 do the thing/);
+  assert.equal(g(wt, 'rev-list', '--count', 'origin/main..HEAD').trim(), '2');
+});
