@@ -678,3 +678,19 @@ test('a busy board does not stop a deploy, hide that it went live, or fail the r
   assert.equal(existsSync(`${E.cfg.paths.main}/deployed.flag`), true);
   assert.equal(JSON.parse(rd(`${E.cfg.paths.state}/run-deploy.json`)).status, 'ok');
 });
+
+test('the exact executor cannot reach a protected folder through its Windows 8.3 short name, nor .git', { skip: process.platform !== 'win32' }, async (t) => {
+  const E = mkEnv(), edit = (file, before, after) => `### ${file}\nBEFORE:\n\`\`\`text\n${before}\n\`\`\`\nAFTER:\n\`\`\`text\n${after}\n\`\`\`\n`;
+  const wt = job(E, 67);
+  put(`${wt}/.forja/config.json`, 'a');
+  put(`${wt}/sub/.git/x`, 'a');
+  const short = spawnSync('powershell', ['-NoProfile', '-Command', `(New-Object -ComObject Scripting.FileSystemObject).GetFolder('${wt.replaceAll('/', '\\')}\\.forja').ShortName`], { encoding: 'utf8' }).stdout.trim();
+  if (!short || short.toLowerCase() === '.forja') return t.skip('8.3 names are disabled on this volume');
+  for (const file of [`${short}/config.json`, `${short.toLowerCase()}/config.json`, '.git/config', 'sub/.git/x']) {
+    put(`${E.J(67)}/spec.md`, SPEC(67, edit(file, 'a', 'b')));
+    await build(E.cfg, 67, 'local:exact', 1);
+    assert.match(rd(`${E.J(67)}/build.md`), /^BUILD: FAILED[\s\S]*no usable Edits block/, file);
+  }
+  assert.equal(rd(`${wt}/.forja/config.json`), 'a');
+  assert.equal(rd(`${wt}/sub/.git/x`), 'a');
+});
