@@ -14,6 +14,7 @@ import { createBoard, field, gh as realGh, locked, paths, read, readJson, writeJ
 const MIN = 60e3, HOUR = 3600e3, STALE = 2 * HOUR;
 export const ID_RE = /^(\d{1,9}|[a-z0-9-]{1,40})$/i;
 const ACTION = { approve: 'approve', aprovar: 'approve', redo: 'redo', refazer: 'redo' };
+const CONSUMES = ['merge', 'open-pr', 'redo'];
 
 // The advisor's text is untrusted: only a known action and short plain fields survive, and it can never recommend
 // approve when the tick would refuse it.
@@ -110,13 +111,13 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
 
   function syncPr(job) {
     const p = JSON.parse(gh('pr', 'view', String(job.pr), '-R', R, '--json', 'state,statusCheckRollup,comments,headRefOid'));
-    const since = Date.parse(job.since ?? 0) || 0;
+    const since = Math.max(Date.parse(job.prCmdAt ?? 0) || 0, Date.parse(job.stageSince ?? job.since ?? 0) || 0);
     job.prState = p.state.toLowerCase();
     job.prHead = p.headRefOid;
     job.ci = ciOf(p.statusCheckRollup);
     const c = p.comments
       .filter(c => isApprover(c.author?.login) && Date.parse(c.createdAt) > since)
-      .map(c => (m => m && { cmd: ACTION[Object.keys(cmds).find(k => cmds[k].includes(m[1].toLowerCase()))], note: m[2].trim() })(c.body.trim().match(/^(\/[\p{L}-]+)\b\s*([\s\S]*)/u)))
+      .map(c => (m => m && { cmd: ACTION[Object.keys(cmds).find(k => cmds[k].includes(m[1].toLowerCase()))], note: m[2].trim(), at: c.createdAt })(c.body.trim().match(/^(\/[\p{L}-]+)\b\s*([\s\S]*)/u)))
       .filter(x => x?.cmd)
       .at(-1);
     job.prCmd = c ?? null;
@@ -486,7 +487,7 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
       if (!s) continue;
       if (s.wait) waiting.push({ issue: job.issue, stage: job.stage, on: s.wait });
       else if (s.step === 'deploy') deploys.push(job);
-      else steps.push({ issue: job.issue, ...s });
+      else steps.push({ issue: job.issue, ...s, ...(job.prCmd && CONSUMES.includes(s.step) ? { set: { ...s.set, prCmdAt: job.prCmd.at } } : {}) });
     }
     if (deploys.length && canAutoDeploy(b, steps)) steps.push(deployStep(deploys));
     else for (const j of deploys) waiting.push({ issue: j.issue, stage: j.stage, on: 'owner' });

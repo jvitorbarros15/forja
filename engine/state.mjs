@@ -89,6 +89,7 @@ export function createBoard(cfg, { relabel = () => {}, needOf = null } = {}) {
       Object.assign(job, patch, { updatedAt: now });
       if (!['needs-you', 'failed'].includes(job.stage)) { delete job.need; delete job.ai; delete job.advisedFor; }
       // `since` marks the start of the current attempt; an output file counts only when it is newer.
+      if ('stage' in patch && patch.stage !== prev.stage) job.stageSince = now;
       if (['stage', 'round', 'executor', 'fails'].some(k => k in patch && patch[k] !== prev[k]) || patch.running?.length) job.since = now;
       const text = typeof event === 'function' ? event() : event;
       if (text) job.events.push({ at: now, text });

@@ -143,3 +143,19 @@ test('concurrent setJob calls keep both changes', async () => {
     assert.equal(job.b, 20);
   } finally { cleanup(); }
 });
+
+test('setJob moves stageSince only when the stage changes, not when running does', () => {
+  const { cfg, P, cleanup } = setup();
+  try {
+    const board = createBoard(cfg);
+    board.setJob(1, { stage: 'needs-you' });
+    const first = readJson(P.board).jobs[0];
+    assert.ok(first.stageSince);
+    const until = Date.now() + 5;
+    while (Date.now() < until);
+    board.setJob(1, { running: ['advisor'] });
+    const job = readJson(P.board).jobs[0];
+    assert.equal(job.stageSince, first.stageSince);
+    assert.notEqual(job.since, first.since);
+  } finally { cleanup(); }
+});

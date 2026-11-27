@@ -738,3 +738,19 @@ test('a job that throws does not abort the other jobs in the tick', () => {
   assert.ok(r.waiting[0].on.startsWith('error: '));
   assert.deepEqual(r.waiting[1], { issue: 24, stage: 'pr', on: 'ci' });
 });
+
+test('a PR command written before the advisor launched is still seen, and is spent once consumed', () => {
+  const C = mkEnv(MULTI);
+  reviewed(C, 26);
+  const at = new Date(Date.now() - 5000).toISOString(), comments = [{ author: { login: 'owner' }, body: '/approve', createdAt: at }];
+  const board = extra => put(C.P.board, { jobs: [job({ issue: 26, stage: 'needs-you', pr: 9, reviews: R, note: 'n', ai: null, running: ['advisor'], since: now(), stageSince: past, ...extra })] });
+  const run = () => createTick(C.cfg, { gh: prGh(comments) }).tick({ dryRun: true }).steps;
+  board({});
+  const [s] = run();
+  assert.equal(s.step, 'open-pr');
+  assert.equal(s.set.prCmdAt, at);
+  board({ prCmdAt: at });
+  assert.deepEqual(run(), []);
+  board({ stageSince: later(-1000) });
+  assert.deepEqual(run(), []);
+});
