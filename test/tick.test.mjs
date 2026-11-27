@@ -589,15 +589,16 @@ test('auto tier merges on green CI when not protected', () => {
   assert.deepEqual(T.stepFor(job({ issue: 111, stage: 'pr', pr: 9, prState: 'open', ci: 'pending', tier: 'A', reviews: R }), {}), { wait: 'ci' });
 });
 
-test('goldfish is skipped when only the spec model is available', () => {
+test('goldfish is skipped in a Claude-only setup, also when strongSpec switched the spec model', () => {
   const C = mkEnv(CLAUDE_ONLY);
   put(`${C.J(5)}/spec.md`, 'TIER: B\nEXECUTOR: small\nBRANCH: forja/5-x\n');
   const s = C.T.stepFor(job({ issue: 5, stage: 'spec', round: 0, tier: undefined, specModel: 'sonnet' }), {});
   assert.equal(s.step, 'build');
   assert.ok(s.event.includes(t('en', 'event.goldfishSkipped')));
   const strong = C.T.stepFor(job({ issue: 5, stage: 'spec', round: 0, tier: undefined, specModel: 'opus' }), {});
-  assert.equal(strong.step, 'goldfish');
-  assert.match(sh(strong.do[0]), / goldfish 5 claude:sonnet$/);
+  assert.equal(strong.step, 'build');
+  assert.ok(strong.event.includes(t('en', 'event.goldfishSkipped')));
+  assert.ok(!sh(strong.do[0]).includes('goldfish'));
   const off = mkEnv({ ...CLAUDE_ONLY, goldfish: false });
   put(`${off.J(5)}/spec.md`, 'TIER: B\nEXECUTOR: small\nBRANCH: forja/5-x\n');
   const o = off.T.stepFor(job({ issue: 5, stage: 'spec', round: 0, tier: undefined, specModel: 'opus' }), {});

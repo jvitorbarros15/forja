@@ -322,11 +322,12 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
           if (mtime(`${dir}/spec-review.md`) <= mtime(`${dir}/spec.md`)) {
             const r = runState('goldfish');
             if (r === 'busy') return wait('goldfish');
-            // The spec agent always runs on Claude, so the blind check must be another model; none configured at all skips it, a quota-limited one waits.
-            const o = { avoidVendor: 'claude', avoidModel: model, strict: true };
-            if (!choose(cfg.models.goldfish, o, {})) skipped = true;
+            // The spec agent always runs on Claude and goldfish has no Claude adapter, so the blind check must be an external model;
+            // none configured at all skips it, a quota-limited one waits.
+            const chain = cfg.models.goldfish.filter(e => !isClaude(e)), o = { avoidVendor: 'claude', avoidModel: model, strict: true };
+            if (!choose(chain, o, {})) skipped = true;
             else {
-              const e = r ? other('goldfish', cfg.models.goldfish, o) : choose(cfg.models.goldfish, o, q);
+              const e = r ? other('goldfish', chain, o) : choose(chain, o, q);
               if (r) return crashed('goldfish', r, e && [bg('goldfish', n, e)]);
               if (!e) return wait('quota');
               return { step: 'goldfish', do: [bg('goldfish', n, e)], event: L('event.blindCheck', { model: e }) };
