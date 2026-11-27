@@ -3,7 +3,7 @@
 //   node runner.mjs --project <dir> --agent <file> runs one Claude agent to its end; the runner starts one such process per agent.
 //   node runner.mjs --launch <script> [args] is the detached launcher of every background process on Windows (see launch).
 import { spawn, spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, openSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ConfigError, loadProjectConfig } from './config.mjs';
@@ -44,14 +44,16 @@ export function makeCtx(cfg, o = {}) {
 // Background work must outlive a runner restart, so it is detached. On Windows node kills every other child with its parent,
 // and a detached process has no console, so each program it starts would open a visible one: the detached process is only
 // a launcher that starts the real script with a hidden console, which everything below inherits, and waits for it.
-export function launch(ctx, argv) {
+// `logFile` receives the script's stdout and stderr; the launcher opens it, since the file is the child's, not the launcher's.
+export function launch(ctx, argv, { logFile } = {}) {
   const cwd = ctx.cfg.paths.project;
   let c;
+  if (logFile) mkdirSync(dirname(logFile), { recursive: true });
   if (IS_WIN) {
-    c = spawn(process.execPath, [SELF, '--launch', ...argv], { cwd, detached: true, stdio: 'ignore', windowsHide: true });
+    c = spawn(process.execPath, [SELF, '--launch', ...(logFile ? ['--log', logFile] : []), ...argv], { cwd, detached: true, stdio: 'ignore', windowsHide: true });
     c.on('error', () => {});
     c.unref();
-  } else c = spawnDetached(process.execPath, argv, { cwd });
+  } else c = spawnDetached(process.execPath, argv, { cwd, logFile });
   if (ctx.once) {
     // --once waits for what it started, so its report covers them; the interval keeps the event loop alive meanwhile.
     const keep = setInterval(() => {}, 1e3);
@@ -400,6 +402,9 @@ export async function run(argv, o = {}) {
 
 if (resolve(process.argv[1] ?? '').toLowerCase() === resolve(SELF).toLowerCase()) {
   const argv = process.argv.slice(2);
-  if (argv[0] === '--launch') spawn(process.execPath, argv.slice(1), { stdio: 'ignore', windowsHide: true }).on('close', code => process.exit(code ?? 1));
+  if (argv[0] === '--launch') {
+    const log = argv[1] === '--log' ? openSync(argv[2], 'a') : 'ignore';
+    spawn(process.execPath, argv.slice(log === 'ignore' ? 1 : 3), { stdio: ['ignore', log, log], windowsHide: true }).on('close', code => process.exit(code ?? 1));
+  }
   else process.exitCode = await run(argv);
 }

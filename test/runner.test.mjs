@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadConfig } from '../engine/config.mjs';
 import { quota } from '../engine/models.mjs';
-import { argError, cycle, feedQueue, makeCtx, execStep, reapAgents, reapDead, run, runCycle, scanAgents, startAgent, writeIssue } from '../engine/runner.mjs';
+import { argError, cycle, feedQueue, launch, makeCtx, execStep, reapAgents, reapDead, run, runCycle, scanAgents, startAgent, writeIssue } from '../engine/runner.mjs';
 import { paths, readJson } from '../engine/state.mjs';
 
 const REPO = resolve(import.meta.dirname, '..').replaceAll('\\', '/'), FAKE = `${REPO}/test/fixtures/fake-cli.mjs`;
@@ -217,6 +217,16 @@ const launchReal = async (E, n, agent) => {
   startAgent(ctx, n, { agent, model: 'sonnet', issue: n, round: 1, out: `${E.J(n)}/decision.md`, cwd: E.cfg.paths.main, prompt: 'hello' });
   await Promise.all([...ctx.pending]);
 };
+
+test('launch sends the process output to logFile, also through the Windows launcher', async () => {
+  const E = mkEnv(), logFile = `${E.root}/state/logs/runner.log`, script = `${E.root}/say.mjs`;
+  put(script, 'console.log("hello out"); console.error("hello err");');
+  launch({ cfg: E.cfg, once: false }, [script], { logFile });
+  let log = '';
+  for (let i = 0; i < 100 && !(/hello out/.test(log) && /hello err/.test(log)); i++) { await new Promise(r => setTimeout(r, 100)); log = existsSync(logFile) ? readFileSync(logFile, 'utf8') : ''; }
+  assert.match(log, /hello out/);
+  assert.match(log, /hello err/);
+});
 
 test('an agent process writes its output file and frees its slot in one board write', async () => {
   const E = mkEnv(), log = `${E.root}/fake.log`;

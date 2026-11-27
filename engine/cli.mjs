@@ -205,7 +205,7 @@ async function start(cfg, o, L, out) {
   const argv = { server: [SERVER, '--project', proj], runner: [RUNNER, '--project', proj, '--every', '15'] };
   const launched = [];
   for (const name of need) {
-    const c = launch(ctx, argv[name]);
+    const c = launch(ctx, argv[name], { logFile: `${state}/logs/${name}.log` });
     if (!c?.pid) { stopNames(cfg, launched, L, () => {}); out.err(L('cli.startFailed', { why: 'spawn' })); return 1; }
     launched.push(name);
     writeJson(pidsFile(cfg), { ...readJson(pidsFile(cfg), {}), [name]: { pid: c.pid, startedAt: new Date().toISOString() } });

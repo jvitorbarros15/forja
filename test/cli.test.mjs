@@ -183,9 +183,10 @@ test('detect works on a bare folder', async () => {
 
 test('start launches server and runner, status reads them, stop kills only them', async () => {
   const { root, project } = mkRepo();
-  const launched = [], H = harness();
-  H.o.launch = (ctx, argv) => {
+  const launched = [], logFiles = [], H = harness();
+  H.o.launch = (ctx, argv, o) => {
     launched.push(argv);
+    logFiles.push(o?.logFile);
     return spawnDetached(process.execPath, argv[0].endsWith('server.mjs') ? argv : ['-e', 'setInterval(() => {}, 1e3)'], { cwd: ctx.cfg.paths.project });
   };
   const state = `${project}/.forja/state`;
@@ -194,6 +195,7 @@ test('start launches server and runner, status reads them, stop kills only them'
     assert.match(H.text(), /Dashboard: http:\/\/127\.0\.0\.1:\d+\//);
     assert.ok(launched[0][0].endsWith('server.mjs') && launched[1][0].endsWith('runner.mjs'));
     assert.deepEqual(launched[1].slice(launched[1].indexOf('--every')), ['--every', '15']);
+    assert.deepEqual(logFiles, [`${state}/logs/server.log`, `${state}/logs/runner.log`]);
     const pids = readJson(`${state}/pids.json`), srv = readJson(`${state}/server.json`);
     assert.deepEqual(Object.keys(pids), ['server', 'runner']);
     assert.ok(alive(pids.server.pid, pids.server.startedAt, 'node') && alive(pids.runner.pid, pids.runner.startedAt, 'node'));
