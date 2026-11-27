@@ -140,7 +140,7 @@ test('doctor passes with every tool present and fails on a missing check command
   assert.equal(await run(['doctor', '--project', project], H.o), 0, H.text());
   assert.match(H.text(), /All required checks passed/);
   assert.doesNotMatch(H.text(), /not in forja-main/);
-  assert.match(H.text(), /\[warn\] goldfish is enabled, but models\.goldfish has no non-Claude entry/);
+  assert.doesNotMatch(H.text(), /goldfish is enabled/);
 
   const main = `${root}/proj-forja-wt/forja-main`;
   mkdirSync(main, { recursive: true });
@@ -161,6 +161,12 @@ test('doctor passes with every tool present and fails on a missing check command
   Hgold.o.env = { PATH: fakeBin(tmp(), 'git', 'gh', 'claude', 'codex', 'node') };
   assert.equal(await run(['doctor', '--project', project], Hgold.o), 0, Hgold.text());
   assert.doesNotMatch(Hgold.text(), /goldfish is enabled/);
+
+  put(`${main}/.forja/config.json`, { ...CONFIG, vendors: { gemini: { enabled: true } } });
+  const Hgem = harness({ ghOut: () => "Token scopes: 'repo'\n" });
+  Hgem.o.env = { PATH: fakeBin(tmp(), 'git', 'gh', 'claude', 'gemini', 'node') };
+  assert.equal(await run(['doctor', '--project', project], Hgem.o), 0, Hgem.text());
+  assert.match(Hgem.text(), /\[warn\] goldfish is enabled, but models\.goldfish has no non-Claude entry/);
   rmSync(main, { recursive: true, force: true });
 
   put(`${project}/.forja/config.json`, { ...CONFIG, checks: { test: 'nonexistent-tool-xyz run' }, vendors: { codex: { enabled: true, bin: 'codex-missing' } } });
