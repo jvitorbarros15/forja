@@ -107,6 +107,7 @@ test('serves the page, job docs and runner heartbeat', async () => {
     put(E.P.runner, { pid: process.pid, at: new Date().toISOString(), waiting: [] });
     const home = await call(s.port, 'GET', '/');
     assert.equal(home.status, 200);
+    assert.equal(home.headers['set-cookie'], undefined);
     assert.equal(home.text, '<h1>hi</h1>');
     assert.deepEqual((await call(s.port, 'GET', '/api/jobs')).json(), [{ issue: 7, stage: 'build' }]);
     assert.equal((await call(s.port, 'GET', '/api/runner')).json().alive, true);
@@ -174,12 +175,14 @@ test('post body over the cap is refused with 413', async () => {
   });
 });
 
-test('a non-local host requires the token', async t => {
-  const E = mkEnv();
+test('a non-local host requires the token and sets/accepts the cookie', async t => {
+  const E = mkEnv(), page = `${mkdtempSync(`${tmpdir()}/forja-tok-`)}/index.html`;
+  writeFileSync(page, '<h1>hi</h1>');
   let s;
-  try { s = await serve(E.cfg, { port: 0, host: '127.0.0.2' }); } catch (e) { if (e.code === 'EADDRNOTAVAIL') return t.skip('127.0.0.2 is not available here'); throw e; }
+  try { s = await serve(E.cfg, { port: 0, host: '127.0.0.2', page }); } catch (e) { if (e.code === 'EADDRNOTAVAIL') return t.skip('127.0.0.2 is not available here'); throw e; }
   try {
     const at = (path, o = {}) => call(s.port, o.method ?? 'GET', path, { host: '127.0.0.2', ...o });
+    const wantCookie = `forja_token=${s.token}; HttpOnly; SameSite=Strict; Path=/`;
     assert.match(s.token, /^[0-9a-f]{48}$/);
     assert.equal(readFileSync(`${E.cfg.paths.state}/.server-token`, 'utf8').trim(), s.token);
     assert.equal((await at('/api/jobs')).status, 401);
@@ -190,12 +193,35 @@ test('a non-local host requires the token', async t => {
     assert.equal((await at('/api/jobs', { headers: { 'x-forja-token': flipped } })).status, 401);
     assert.equal((await at(`/api/jobs?t=${encodeURIComponent('\u00e9'.repeat(s.token.length))}`)).status, 401);
     assert.equal((await at('/api/events')).status, 401);
-    assert.equal((await at(`/api/jobs?t=${s.token}`)).status, 200);
-    assert.equal((await at('/api/jobs', { headers: { 'x-forja-token': s.token } })).status, 200);
+
+    const wrongCookie = await at('/api/jobs', { headers: { cookie: `forja_token=${flipped}` } });
+    assert.equal(wrongCookie.status, 401);
+    assert.equal(wrongCookie.headers['set-cookie'], undefined);
+    assert.equal((await at('/api/jobs', { headers: { cookie: 'forja_token=wrong' } })).status, 401);
+    assert.equal((await at('/api/jobs', { headers: { cookie: `other_forja_token=${s.token}` } })).status, 401);
+
+    const first = await at(`/?t=${s.token}`);
+    assert.equal(first.status, 200);
+    assert.deepEqual(first.headers['set-cookie'], [wantCookie]);
+
+    const qAuth = await at(`/api/jobs?t=${s.token}`);
+    assert.equal(qAuth.status, 200);
+    assert.deepEqual(qAuth.headers['set-cookie'], [wantCookie]);
+
+    const hAuth = await at('/api/jobs', { headers: { 'x-forja-token': s.token } });
+    assert.equal(hAuth.status, 200);
+    assert.deepEqual(hAuth.headers['set-cookie'], [wantCookie]);
+
+    const cHome = await at('/', { headers: { cookie: `forja_token=${s.token}` } });
+    assert.equal(cHome.status, 200);
+    assert.equal(cHome.headers['set-cookie'], undefined);
+    assert.equal((await at('/api/jobs', { headers: { cookie: `a=1; forja_token=${s.token}; b=2` } })).status, 200);
+
     const body = { jobId: '5', action: 'approve' };
     assert.equal((await at('/api/commands', { method: 'POST', body })).status, 401);
     assert.equal((await at('/api/commands', { method: 'POST', body, headers: { 'x-forja-token': s.token, origin: 'http://evil.example' } })).status, 403);
     assert.equal((await at('/api/commands', { method: 'POST', body, headers: { 'x-forja-token': s.token, origin: `http://127.0.0.2:${s.port}` } })).status, 201);
+    assert.equal((await at('/api/commands', { method: 'POST', body: { jobId: '6', action: 'approve' }, headers: { cookie: `forja_token=${s.token}`, origin: `http://127.0.0.2:${s.port}` } })).status, 201);
   } finally { await s.close(); }
 });
 
@@ -227,10 +253,18 @@ test('HTML and JSON responses include clickjacking and nosniff headers', async (
   });
 });
 
-test('malformed URL returns 400 and watcher/SSE errors do not crash the server', async () => {
+test('malformed URL returns 400 and watcher/SSE errors recover without crashing', async () => {
   const watchers = [];
-  const watch = (_dir, cb) => { const w = new EventEmitter(); w.close = () => {}; w.trigger = f => cb('change', f); watchers.push(w); return w; };
-  await withServer({}, { watch }, async s => {
+  const watch = (dir, cb) => {
+    const w = new EventEmitter();
+    w.dir = dir;
+    w.closed = 0;
+    w.close = () => { w.closed++; };
+    w.trigger = f => cb('change', f);
+    watchers.push(w);
+    return w;
+  };
+  await withServer({}, { watch, watchRetry: 30 }, async (s, E) => {
     const bad = await call(s.port, 'GET', '//a:b/');
     assert.equal(bad.status, 400);
 
@@ -245,13 +279,43 @@ test('malformed URL returns 400 and watcher/SSE errors do not crash the server',
     watchers[1].trigger('commands.json');
     await new Promise(r => setTimeout(r, 220));
 
+    assert.equal(watchers.length, 2);
+    watchers[0].emit('error', Object.assign(new Error('EMFILE'), { code: 'EMFILE' }));
     watchers[0].emit('error', Object.assign(new Error('EMFILE'), { code: 'EMFILE' }));
     watchers[1].emit('error', Object.assign(new Error('ENOSPC'), { code: 'ENOSPC' }));
+    assert.equal(watchers[0].closed, 1);
+    assert.equal(watchers[1].closed, 1);
     assert.equal((await call(s.port, 'GET', '/api/jobs')).status, 200);
+
+    await new Promise(r => setTimeout(r, 100));
+    assert.equal(watchers.length, 4);
+    const rearmedState = watchers.slice(2).find(w => w.dir === E.cfg.paths.state);
+    assert.ok(rearmedState);
+
+    let sseChunk = '';
+    await new Promise((ok, no) => {
+      const r = http.request({ host: '127.0.0.1', port: s.port, method: 'GET', path: '/api/events' }, res => {
+        res.on('data', c => {
+          sseChunk += c;
+          if (sseChunk.includes('event: commands')) { r.destroy(); ok(); }
+        });
+        rearmedState.trigger('commands.json');
+      });
+      r.on('error', () => {});
+      r.end();
+      setTimeout(() => no(new Error('re-armed sse timeout')), 3000).unref();
+    });
+    assert.match(sseChunk, /event: commands/);
   });
-  await withServer({}, { watch: () => { throw new Error('EMFILE'); } }, async s => {
+
+  let tries = 0;
+  await withServer({}, { watch: () => { tries++; throw new Error('EMFILE'); }, watchRetry: 30 }, async s => {
     assert.equal((await call(s.port, 'GET', '/api/jobs')).status, 200);
+    assert.ok(tries >= 2);
   });
+  const triesAfterClose = tries;
+  await new Promise(r => setTimeout(r, 80));
+  assert.equal(tries, triesAfterClose);
 });
 
 test('mutateQueue performs full read-modify-write inside the queue lock', async () => {
@@ -284,9 +348,14 @@ test('mutateQueue performs full read-modify-write inside the queue lock', async 
   });
 });
 
-test('api/runner checks liveness asynchronously and caches within TTL', async () => {
-  let calls = 0;
-  const alive = async () => { calls++; await new Promise(r => setTimeout(r, 10)); return true; };
+test('api/runner checks liveness asynchronously, caches within TTL, keeps last value on error, and returns 500 on unexpected failure', async () => {
+  let calls = 0, mode = 'ok';
+  const alive = () => {
+    calls++;
+    if (mode === 'throw') throw new Error('boom');
+    if (mode === 'reject') return Promise.reject(new Error('timeout'));
+    return new Promise(r => setTimeout(() => r(true), 10));
+  };
   await withServer({}, { alive }, async (s, E) => {
     const t1 = new Date().toISOString();
     put(E.P.runner, { pid: process.pid, at: t1, waiting: [] });
@@ -299,9 +368,25 @@ test('api/runner checks liveness asynchronously and caches within TTL', async ()
     assert.equal(c.json().alive, true);
     assert.equal(calls, 1);
 
-    put(E.P.runner, { pid: process.pid + 1, at: new Date(Date.now() + 1000).toISOString(), waiting: [] });
-    const d = await call(s.port, 'GET', '/api/runner');
-    assert.equal(d.json().alive, true);
+    mode = 'reject';
+    put(E.P.runner, { pid: process.pid, at: new Date(Date.now() + 1000).toISOString(), waiting: [] });
+    const kept = await call(s.port, 'GET', '/api/runner');
+    assert.equal(kept.status, 200);
+    assert.equal(kept.json().alive, true);
     assert.equal(calls, 2);
+
+    put(E.P.runner, { pid: process.pid + 1, at: new Date(Date.now() + 2000).toISOString(), waiting: [] });
+    const uncached = await call(s.port, 'GET', '/api/runner');
+    assert.equal(uncached.status, 200);
+    assert.equal(uncached.json().alive, false);
+    assert.equal(calls, 3);
+
+    mode = 'throw';
+    put(E.P.runner, { pid: process.pid + 2, at: new Date(Date.now() + 3000).toISOString(), waiting: [] });
+    const err = await call(s.port, 'GET', '/api/runner');
+    assert.equal(err.status, 500);
+    assert.equal(err.headers['x-content-type-options'], 'nosniff');
+    assert.equal(typeof err.json().error, 'string');
+    assert.equal(calls, 4);
   });
 });

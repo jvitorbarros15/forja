@@ -80,13 +80,13 @@ test('dashboard animates only new cards, guards SSE frames and a failed boot, an
 
 test('dashboard strips ?t= from the URL and sends x-forja-token on fetch calls', () => {
   const snippet = script.match(/const TOK=[\s\S]*?const api=[^\n]+/)?.[0];
-  assert.ok(snippet, 'TOK/sse/api helpers exist');
-  assert.doesNotMatch(script, /\bfetch\s*\(\s*api\s*\(/, 'fetch calls must go through api()');
-  assert.match(script, /new EventSource\(sse\('\/api\/events'\)\)/);
+  assert.ok(snippet, 'TOK/api helpers exist');
+  assert.equal((script.match(/\bfetch\s*\(/g) ?? []).length, 1, 'every fetch call must go through api()');
+  assert.match(script, /new EventSource\('\/api\/events'\)/);
   let replaced = null;
   const calls = [];
   const runWith = search => vm.runInNewContext(
-    `${snippet}; ({ TOK, sseUrl: sse('/api/events'), a: api('/api/jobs'), b: api('/api/commands', { method: 'POST', headers: { 'content-type': 'application/json' } }) })`,
+    `${snippet}; ({ TOK, a: api('/api/jobs'), b: api('/api/commands', { method: 'POST', headers: { 'content-type': 'application/json' } }) })`,
     {
       URLSearchParams,
       location: { pathname: '/', search, hash: '#top' },
@@ -97,12 +97,21 @@ test('dashboard strips ?t= from the URL and sends x-forja-token on fetch calls',
   const out = runWith('?foo=1&t=secret123');
   assert.equal(out.TOK, 'secret123');
   assert.equal(replaced, '/?foo=1#top');
-  assert.equal(out.sseUrl, '/api/events?t=secret123');
   assert.deepEqual(JSON.parse(JSON.stringify(calls)), [
     { url: '/api/jobs', opts: { headers: { 'x-forja-token': 'secret123' } } },
     { url: '/api/commands', opts: { method: 'POST', headers: { 'content-type': 'application/json', 'x-forja-token': 'secret123' } } },
   ]);
   replaced = null;
+  calls.length = 0;
   runWith('?t=only');
   assert.equal(replaced, '/#top');
+  replaced = null;
+  calls.length = 0;
+  const noTok = runWith('');
+  assert.equal(noTok.TOK, null);
+  assert.equal(replaced, null);
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)), [
+    { url: '/api/jobs', opts: {} },
+    { url: '/api/commands', opts: { method: 'POST', headers: { 'content-type': 'application/json' } } },
+  ]);
 });

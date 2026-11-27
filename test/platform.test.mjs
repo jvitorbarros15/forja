@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { IS_WIN, alive, aliveAsync, killOne, killTree, spawnDetached, linkDir, notify } from '../engine/platform.mjs';
+import { IS_WIN, alive, aliveAsync, runAsync, killOne, killTree, spawnDetached, linkDir, notify } from '../engine/platform.mjs';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'forja-plat-'));
 
@@ -112,4 +112,18 @@ test('aliveAsync checks current, pre-boot, dead, and image-named processes', asy
   const child = spawn(process.execPath, ['-e', ''], { stdio: 'ignore' });
   await new Promise(r => child.on('close', r));
   assert.equal(await aliveAsync(child.pid, now), false);
+});
+
+test('runAsync times out and kills a hung child', async () => {
+  const t0 = Date.now();
+  await assert.rejects(() => runAsync(process.execPath, ['-e', 'setInterval(()=>{},1e3)'], 200), e => e?.killed === true);
+  assert.ok(Date.now() - t0 < 4000);
+});
+
+test('aliveAsync rejects on probe timeout or error instead of returning false', async () => {
+  const now = new Date().toISOString();
+  await assert.rejects(
+    () => aliveAsync(process.pid, now, 'node', { run: () => Promise.reject(Object.assign(new Error('timeout'), { killed: true })) }),
+    /timeout/
+  );
 });

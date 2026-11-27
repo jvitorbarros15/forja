@@ -23,6 +23,14 @@ const RUNS = { 'run-deploy.json': 'deploy', 'run-deploy-test.json': 'test' };
 const rj = (p, d) => { try { return readJson(p, d); } catch { return d; } };
 const json = (res, code, body) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' }); res.end(JSON.stringify(body)); };
 const eqToken = (a, b) => { if (typeof a !== 'string' || typeof b !== 'string') return false; const x = Buffer.from(a), y = Buffer.from(b); return x.length === y.length && timingSafeEqual(x, y); };
+const cookieOf = (hdr, name) => {
+  if (typeof hdr !== 'string') return null;
+  for (const p of hdr.split(';')) {
+    const i = p.indexOf('=');
+    if (i > 0 && p.slice(0, i).trim() === name) return p.slice(i + 1).trim();
+  }
+  return null;
+};
 const shown = host => (host.includes(':') ? `[${host}]` : host);
 const defaultGh = args => new Promise((ok, no) => execFile('gh', args, { timeout: 60e3, windowsHide: true, maxBuffer: 1 << 20 }, (e, out, err) => (e ? no(new Error(String(err || e.message).trim().slice(0, 300))) : ok(String(out).trim()))));
 const snippet = b => String(b ?? '').replace(/<[^>]*>|[`#*>_\[\]]/g, ' ').replace(/[\x00-\x1f\x7f]+|\s+/g, ' ').trim().slice(0, 200);
@@ -37,7 +45,7 @@ export function dashboardUrl(state) {
 export async function serve(cfg, o = {}) {
   const P = paths(cfg), state = cfg.paths.state, L = (k, v) => t(cfg.language, k, v), R = cfg.repo;
   const host = o.host ?? cfg.server.host, local = LOCAL_HOSTS.includes(host), gh = o.gh ?? defaultGh, page = o.page ?? PAGE;
-  const isAlive = o.alive ?? aliveAsync, watchFn = o.watch ?? watch;
+  const isAlive = o.alive ?? aliveAsync, watchFn = o.watch ?? watch, watchRetry = o.watchRetry ?? 1e3;
   const triageOn = !!(o.triage || (cfg.vendors.ollama?.enabled && cfg.vendors.ollama.triageModel));
   const decide = o.triage ?? ((text, signal) => chat(cfg, text, signal));
   const runFile = f => `${state}/${f}`, QUEUE_MAX = cfg.queue.max, TCACHE = `${state}/triage-cache.json`;
@@ -52,22 +60,21 @@ export async function serve(cfg, o = {}) {
 
   const jobs = () => readdirSync(P.docs).filter(f => f.endsWith('.json')).map(f => rj(`${P.docs}/${f}`, null)).filter(Boolean);
   const commands = () => { const c = rj(P.commands, []); return Array.isArray(c) ? c : []; };
-  let aliveCache = { key: '', at: 0, val: false, pending: null };
+  let aliveCache = null, alivePending = null;
   async function runner() {
     const r = rj(P.runner, null);
     if (!r) return null;
-    const key = `${r.pid}:${r.at}`, now = Date.now();
-    if (aliveCache.key !== key || now - aliveCache.at >= ALIVE_TTL) {
-      if (!aliveCache.pending || aliveCache.key !== key) {
-        const p = Promise.resolve(isAlive(r.pid, r.at, 'node')).then(
-          val => { if (aliveCache.pending === p) aliveCache = { key, at: Date.now(), val, pending: null }; return val; },
-          () => { if (aliveCache.pending === p) aliveCache = { key, at: Date.now(), val: false, pending: null }; return false; }
-        );
-        aliveCache = { key, at: 0, val: false, pending: p };
-      }
-      return { ...r, alive: await aliveCache.pending };
+    const key = `${r.pid}:${r.at}`;
+    if (aliveCache?.key === key && Date.now() - aliveCache.at < ALIVE_TTL) return { ...r, alive: aliveCache.val };
+    if (alivePending?.key !== key) {
+      const fallback = aliveCache?.pid === r.pid ? aliveCache.val : false;
+      const p = Promise.resolve(isAlive(r.pid, r.at, 'node')).then(
+        val => { if (alivePending?.p === p) { aliveCache = { key, pid: r.pid, val, at: Date.now() }; alivePending = null; } return val; },
+        () => { if (alivePending?.p === p) { aliveCache = { key, pid: r.pid, val: fallback, at: Date.now() }; alivePending = null; } return fallback; }
+      );
+      alivePending = { key, p };
     }
-    return { ...r, alive: aliveCache.val };
+    return { ...r, alive: await alivePending.p };
   }
   // What the page may know about the last deploy and the last deploy test: the plain note, never the raw output kept in `detail`.
   const deploys = () => Object.fromEntries(Object.entries(RUNS).map(([file, key]) => {
@@ -268,8 +275,8 @@ export async function serve(cfg, o = {}) {
     for (const r of [...clients]) push(r, chunk);
   };
 
-  const watched = ['board.json', 'commands.json', 'runner.json', 'queue.json', ...Object.keys(RUNS)], changed = new Set(), watchers = [];
-  let timer = null;
+  const watched = ['board.json', 'commands.json', 'runner.json', 'queue.json', ...Object.keys(RUNS)], changed = new Set(), watchers = new Set(), retryTimers = new Set();
+  let timer = null, closed = false;
   function flush() {
     timer = null;
     const files = [...changed]; changed.clear();
@@ -284,11 +291,25 @@ export async function serve(cfg, o = {}) {
   }
   const bump = f => { if (f) { changed.add(String(f)); timer ??= setTimeout(flush, 150); } };
   const watchDir = (dir, fn) => {
+    if (closed) return;
+    const retry = () => {
+      if (closed) return;
+      const t = setTimeout(() => { retryTimers.delete(t); watchDir(dir, fn); }, watchRetry);
+      t.unref();
+      retryTimers.add(t);
+    };
     try {
       const w = watchFn(dir, fn);
-      w.on('error', () => { try { w.close(); } catch {} });
-      watchers.push(w);
-    } catch {}
+      let dead = false;
+      w.on('error', () => {
+        if (dead) return;
+        dead = true;
+        watchers.delete(w);
+        try { w.close(); } catch {}
+        retry();
+      });
+      watchers.add(w);
+    } catch { retry(); }
   };
   watchDir(P.docs, (_, f) => bump(f));
   watchDir(state, (_, f) => { if (watched.includes(f)) bump(f); });
@@ -302,7 +323,11 @@ export async function serve(cfg, o = {}) {
       const h = (req.headers.host ?? '').replace(/:\d+$/, '');
       if (!['127.0.0.1', 'localhost', '[::1]'].includes(h)) return json(res, 403, { error: L('server.badHost') });
     }
-    if (token && !eqToken(url.searchParams.get('t'), token) && !eqToken(req.headers['x-forja-token'], token)) return json(res, 401, { error: L('server.token') });
+    if (token) {
+      const explicit = eqToken(url.searchParams.get('t'), token) || eqToken(req.headers['x-forja-token'], token);
+      if (!explicit && !eqToken(cookieOf(req.headers.cookie, 'forja_token'), token)) return json(res, 401, { error: L('server.token') });
+      if (explicit) res.setHeader('set-cookie', `forja_token=${token}; HttpOnly; SameSite=Strict; Path=/`);
+    }
     const get = req.method === 'GET', is = p => url.pathname === p;
 
     if (get && (is('/') || is('/index.html'))) {
@@ -320,7 +345,7 @@ export async function serve(cfg, o = {}) {
     if (get && is('/api/config')) return json(res, 200, config());
     if (get && is('/api/jobs')) return json(res, 200, jobs());
     if (get && is('/api/commands')) return json(res, 200, commands());
-    if (get && is('/api/runner')) return runner().then(r => json(res, 200, r));
+    if (get && is('/api/runner')) return runner().then(r => json(res, 200, r)).catch(() => { if (!res.headersSent) json(res, 500, { error: L('server.failed') }); });
     if (get && is('/api/deploy')) return json(res, 200, deploys());
     if (get && is('/api/events')) {
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
@@ -350,9 +375,13 @@ export async function serve(cfg, o = {}) {
   writeJson(`${state}/server.json`, { pid: process.pid, port, host, startedAt: new Date().toISOString() });
 
   const close = () => {
+    closed = true;
     clearInterval(ping);
     clearTimeout(timer);
+    for (const t of retryTimers) clearTimeout(t);
+    retryTimers.clear();
     for (const w of watchers) try { w.close(); } catch {}
+    watchers.clear();
     for (const r of clients) try { r.end(); } catch {}
     clients.clear();
     if (rj(`${state}/server.json`, null)?.pid === process.pid) rmSync(`${state}/server.json`, { force: true });

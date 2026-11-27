@@ -4,9 +4,9 @@ import { uptime } from 'node:os';
 import { basename } from 'node:path';
 
 export const IS_WIN = process.platform === 'win32';
-const BOOT = Date.now() - uptime() * 1e3;
+const BOOT = Date.now() - uptime() * 1e3, PROBE_TIMEOUT = 5e3;
 const run = (cmd, a) => execFileSync(cmd, a, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
-const runAsync = (cmd, a) => new Promise((ok, no) => execFile(cmd, a, { encoding: 'utf8', windowsHide: true }, (e, out) => (e ? no(e) : ok(out))));
+export const runAsync = (cmd, a, timeout = PROBE_TIMEOUT) => new Promise((ok, no) => execFile(cmd, a, { encoding: 'utf8', windowsHide: true, timeout, killSignal: 'SIGKILL' }, (e, out) => (e ? no(e) : ok(out))));
 // "node" also means whatever this node binary is called: a versioned or symlinked install shows up under that name.
 const namesOf = image => {
   const n = image?.replace(/\.exe$/i, '').toLowerCase();
@@ -15,28 +15,28 @@ const namesOf = image => {
 const commIs = (comm, names) => !names.length || names.some(n => basename(comm.trim()).toLowerCase().slice(0, 15) === n.slice(0, 15));
 const taskIs = (out, names) => !names.length ? out.startsWith('"') : names.some(n => out.startsWith(`"${n}.exe"`));
 
+function probe(pid, startedAt, image) {
+  pid = Number(pid);
+  if (!(pid > 0) || new Date(startedAt).getTime() < BOOT) return null;
+  const names = namesOf(image);
+  if (IS_WIN) return { cmd: 'tasklist', args: ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], parse: out => taskIs(out.toLowerCase(), names) };
+  try { process.kill(pid, 0); } catch { return null; }
+  return { cmd: 'ps', args: ['-p', String(pid), '-o', 'comm='], parse: out => commIs(out, names) };
+}
+
 // A pid recorded before the last boot belongs to nobody. Fast Startup keeps uptime running across a shutdown,
 // so when an image is given the pid must also still be that program; anything else reusing it counts as dead.
 export function alive(pid, startedAt, image) {
-  pid = Number(pid);
-  if (!(pid > 0) || new Date(startedAt).getTime() < BOOT) return false;
-  const names = namesOf(image);
-  try {
-    if (IS_WIN) return taskIs(run('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH']).toLowerCase(), names);
-    process.kill(pid, 0);
-    return commIs(run('ps', ['-p', String(pid), '-o', 'comm=']), names);
-  } catch { return false; }
+  const p = probe(pid, startedAt, image);
+  if (!p) return false;
+  try { return p.parse(run(p.cmd, p.args)); } catch { return false; }
 }
 
-export async function aliveAsync(pid, startedAt, image) {
-  pid = Number(pid);
-  if (!(pid > 0) || new Date(startedAt).getTime() < BOOT) return false;
-  const names = namesOf(image);
-  try {
-    if (IS_WIN) return taskIs((await runAsync('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'])).toLowerCase(), names);
-    process.kill(pid, 0);
-    return commIs(await runAsync('ps', ['-p', String(pid), '-o', 'comm=']), names);
-  } catch { return false; }
+export async function aliveAsync(pid, startedAt, image, o = {}) {
+  const p = probe(pid, startedAt, image);
+  if (!p) return false;
+  try { return p.parse(await (o.run ?? runAsync)(p.cmd, p.args, o.timeout)); }
+  catch (e) { if (!IS_WIN && e?.code === 1 && !e.killed) return false; throw e; }
 }
 
 // True only when the process is known not to exist; a failure to find out counts as "may be alive", because the answer

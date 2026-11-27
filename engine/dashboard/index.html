@@ -549,7 +549,6 @@ footer{margin-top:20px;font-size:12px;color:var(--muted)}
 /* ---------- 13. Data: state, API, helpers ---------- */
 const $=id=>document.getElementById(id);
 const TOK=(()=>{const p=new URLSearchParams(location.search),v=p.get('t');if(v!==null){p.delete('t');const s=p.toString();try{history.replaceState(null,'',location.pathname+(s?'?'+s:'')+location.hash)}catch{}}return v})();
-const sse=p=>p+(TOK?(p.includes('?')?'&':'?')+'t='+encodeURIComponent(TOK):'');
 const api=(p,o={})=>fetch(p,TOK?{...o,headers:{...o.headers,'x-forja-token':TOK}}:o);
 let CFG=null,STR={},LOC='en',REPO='',RANK={};
 const t=(k,v)=>{const s=STR[k]??k;return v?s.replace(/\{(\w+)\}/g,(m,n)=>n in v?v[n]:m):s};
@@ -1273,7 +1272,7 @@ async function loadDeploy(){try{const r=await api('/api/deploy');if(r.ok){dep=aw
 async function loadRunner(){try{showRunner(await (await api('/api/runner')).json())}catch{$('runner').textContent=t('ui.runner.unknown')}}
 function connect(){
   Promise.all([loadJobs().then(()=>live(true)),loadCmds(),loadDeploy(),loadRunner(),loadQueue()]).then(()=>{booted=true;sigBoard='';render()});
-  const es=new EventSource(sse('/api/events')),on=fn=>e=>{let d;try{d=JSON.parse(e.data)}catch{return}fn(d)};
+  const es=new EventSource('/api/events'),on=fn=>e=>{let d;try{d=JSON.parse(e.data)}catch{return}fn(d)};
   es.onopen=()=>{live(true);loadJobs();loadCmds();loadDeploy();loadRunner();loadQueue()};
   es.addEventListener('queue',()=>loadQueue());
   es.onerror=()=>live(false);
