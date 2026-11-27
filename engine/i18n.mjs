@@ -15,3 +15,5 @@ export function aliases(lang) {
   const x = EXTRA[lang] ?? EXTRA.en;
   return { approve: ['/approve', ...x.approve], redo: ['/redo', ...x.redo] };
 }
+
+export const strings = (lang, prefix) => Object.fromEntries(Object.keys(en).filter((k) => k.startsWith(prefix)).map((k) => [k, t(lang, k)]));
