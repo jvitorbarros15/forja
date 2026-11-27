@@ -54,12 +54,13 @@ function syncDeps(cfg) {
 }
 
 // forja-main only ever fast-forwards to the default branch. Nothing is run in the project checkout but fetch and worktree add.
-export function ensureMain(cfg) {
+// `install: false` skips the dependency install, which can take minutes: the runner uses it before a spec so one job's install never holds up the others.
+export function ensureMain(cfg, { install = true } = {}) {
   const { project, main } = cfg.paths;
   git(project, 'fetch', '-q', 'origin', cfg.defaultBranch);
   if (existsSync(main)) git(main, 'merge', '-q', '--ff-only', `origin/${cfg.defaultBranch}`);
   else git(project, 'worktree', 'add', '-q', '--detach', main, `origin/${cfg.defaultBranch}`);
-  syncDeps(cfg);
+  if (install) syncDeps(cfg);
 }
 
 const link = (cfg, wt) => {

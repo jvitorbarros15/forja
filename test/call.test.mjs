@@ -525,7 +525,12 @@ test('the CLI logs calls, rejects unknown commands, wraps check and build in run
   assert.match(rd(`${E.J(7)}/build.md`), /^BUILD: FAILED[\s\S]*changed nothing/);
   const s = cli('setup', '9');
   assert.equal(s.status, 1);
-  assert.match(s.stderr, /bad BRANCH/);
+  assert.match(JSON.parse(s.stdout).note, /bad BRANCH/);
+  assert.deepEqual(['setup', 'failed'], [JSON.parse(rd(`${E.J(9)}/run-setup.json`)).kind, JSON.parse(rd(`${E.J(9)}/run-setup.json`)).status]);
+  put(`${E.J(10)}/spec.md`, SPEC(10));
+  assert.equal(cli('setup', '10').status, 0);
+  assert.equal(JSON.parse(rd(`${E.J(10)}/run-setup.json`)).status, 'ok');
+  assert.equal(existsSync(E.WT(10)), true);
 });
 
 test('check commands substitute {project} and {main}', async () => {

@@ -555,8 +555,9 @@ test('a build with every external vendor limited falls back to a Claude builder'
   const s = T.stepFor(job({ issue: 98, stage: 'build', executor: 'medium', entry: 'codex:sol' }), T.quota());
   assert.equal(s.step, 'build');
   assert.equal(s.set.entry, 'claude:sonnet');
-  assert.deepEqual(s.set.running, ['builder']);
-  assert.equal(s.do.find(d => d.agent).model, 'sonnet');
+  assert.deepEqual(s.set.running, []);
+  assert.match(sh(s.do[0]), / setup 98$/);
+  assert.equal(s.do.some(d => d.agent), false);
   put(`${F}/quota.json`, { calls: [] });
 });
 
@@ -581,9 +582,34 @@ test('claude-only medium build runs the builder agent on sonnet', () => {
   assert.equal(s.step, 'build');
   assert.equal(s.set.executor, 'medium');
   assert.equal(s.set.entry, 'claude:sonnet');
+  assert.deepEqual(s.set.running, []);
+  assert.deepEqual(s.do.map(d => d.bg && d.bg.slice(-2).join(' ')), ['setup 1']);
+});
+
+test('the Claude builder starts only once setup, run in the background, has finished; a failed setup is tried again once', () => {
+  const C = mkEnv(CLAUDE_ONLY), j = o => job({ issue: 3, stage: 'build', executor: 'medium', entry: 'claude:sonnet', since: later(-60e3), ...o });
+  const run = o => put(`${C.J(3)}/run-setup.json`, { kind: 'setup', pid: process.pid, startedAt: later(-30e3), ...o });
+  const first = C.T.stepFor(j(), {});
+  assert.equal(first.step, 'build');
+  assert.match(sh(first.do[0]), / setup 3$/);
+  run({ status: 'running' });
+  assert.deepEqual(C.T.stepFor(j(), {}), { wait: 'setup' });
+  run({ status: 'ok', endedAt: later(-20e3) });
+  const s = C.T.stepFor(j(), {});
+  assert.equal(s.step, 'builder');
   assert.deepEqual(s.set.running, ['builder']);
-  assert.match(sh(s.do[0]), / setup 1$/);
-  assert.deepEqual({ ...s.do[1], prompt: undefined }, { agent: 'builder', model: 'sonnet', issue: 1, round: 1, out: `${C.J(1)}/builder.md`, cwd: C.cfg.paths.main, prompt: undefined });
+  assert.deepEqual({ ...s.do[0], prompt: undefined }, { agent: 'builder', model: 'sonnet', issue: 3, round: 1, out: `${C.J(3)}/builder.md`, cwd: C.cfg.paths.main, prompt: undefined });
+  run({ status: 'ok', endedAt: later(-120e3) });
+  assert.equal(C.T.stepFor(j(), {}).step, 'build');
+  run({ status: 'failed', endedAt: later(-20e3), note: 'npm ci failed' });
+  const retry = C.T.stepFor(j(), {});
+  assert.equal(retry.step, 'retry');
+  assert.match(sh(retry.do[0]), / setup 3$/);
+  assert.equal(C.T.stepFor(j({ stepRetry: ['setup@1'] }), {}).step, 'fail');
+  run({ status: 'failed', endedAt: later(-20e3), note: 'conflict while bringing main into the branch' });
+  const conflict = C.T.stepFor(j(), {});
+  assert.equal(conflict.step, 'fail');
+  assert.equal(conflict.set.stage, 'failed');
 });
 
 test('an unknown spec EXECUTOR size becomes small', () => {
@@ -591,7 +617,7 @@ test('an unknown spec EXECUTOR size becomes small', () => {
   put(`${C.J(1)}/spec.md`, 'TIER: B\nEXECUTOR: gigantic\nBRANCH: forja/1-x\n');
   const s = C.T.stepFor(job({ issue: 1, stage: 'spec', round: 0, tier: undefined, specModel: 'sonnet', specRevised: true }), {});
   assert.equal(s.set.executor, 'small');
-  assert.equal(s.do.find(d => d.agent).model, 'haiku');
+  assert.equal(s.set.entry, 'claude:haiku');
 });
 
 test('claude-only review runs the same-model reviewer agent', () => {

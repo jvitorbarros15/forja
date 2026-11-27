@@ -193,12 +193,13 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
   const entryFor = (rung, q) => choose(cfg.models.build[rung], {}, q);
   const buildDo = (job, entry) => {
     if (!entry) return null;
-    return isClaude(entry) ? [{ run: call('setup', job.issue) }, agentDo('builder', parseEntry(entry).model, job)] : [bg('build', job.issue, entry, job.round)];
+    // The worktree is made in the background (an install can take minutes): the Claude builder starts once the tick sees setup's run file ok.
+    return isClaude(entry) ? [bg('setup', job.issue)] : [bg('build', job.issue, entry, job.round)];
   };
   // Every allowed entry of the chain being out of quota makes pick fall back to claude:sonnet, or null when Claude is held too: the job waits.
   const buildStep = (step, job, set, event, q) => {
     const next = { ...job, ...set }, entry = entryFor(next.executor, q), d = buildDo(next, entry);
-    return { step, set: { ...set, entry, running: isClaude(entry) ? ['builder'] : [] }, do: d ?? [], event: d ? event : L('event.waitingQuota', { event }) };
+    return { step, set: { ...set, entry, running: [] }, do: d ?? [], event: d ? event : L('event.waitingQuota', { event }) };
   };
 
   const redo = (job, note, q) => {
@@ -372,6 +373,10 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
           if (c) return crashed('check', c, [bg('check', n, entry, job.round)]);
           if (fresh('builder.md')) return { step: 'check', set: { running: [] }, do: [bg('check', n, entry, job.round)], event: L('event.builderDone') };
           if (busy('builder')) return wait('builder');
+          const s = runState('setup');
+          if (s === 'busy') return wait('setup');
+          // A branch that conflicts with main or a bad BRANCH is not fixed by running setup again.
+          if (s) return HOPELESS.test(s) ? { step: 'fail', ...stepFailed(job, 'setup', s) } : crashed('setup', s, [bg('setup', n)]);
         } else {
           const r = runState('build');
           if (r === 'busy') return wait('build');
@@ -379,7 +384,11 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
         }
         if (isClaude(entryFor(job.executor, q)) !== isClaude(entry)) return buildStep('build', job, {}, L('event.quotaFallback'), q);
         const cur = entryFor(job.executor, q), d = buildDo(job, cur);
-        return d ? { step: 'build', set: { entry: cur, ...(isClaude(cur) ? { running: ['builder'] } : {}) }, do: d, event: L('event.building', { executor: job.executor }) } : wait('quota');
+        if (!d) return wait('quota');
+        if (isClaude(cur) && (r => r?.status === 'ok' && Date.parse(r.endedAt) > since)(readJson(`${dir}/run-setup.json`, null))) {
+          return { step: 'builder', set: { entry: cur, running: ['builder'] }, do: [agentDo('builder', parseEntry(cur).model, job)], event: L('event.building', { executor: job.executor }) };
+        }
+        return { step: 'build', set: { entry: cur }, do: d, event: L(isClaude(cur) ? 'event.settingUp' : 'event.building', { executor: job.executor }) };
       }
 
       case 'review': {

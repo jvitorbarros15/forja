@@ -125,7 +125,7 @@ Copy the plugin's template as a starting point, then change only what the projec
 }
 ```
 
-Each command runs in the worktree. `null` skips the check. `deployTest` runs automatically after merge. `deploy` is optional; without it, `merged` is the final state.
+Each command runs in the worktree. `null` skips the check. `deployTest` runs automatically after merge. `deploy` is optional; without it, `merged` is the final state. The worktree and `install` of a job run in a background step, so a slow install never stops the runner. The `install` of `forja-main` runs only when its dependency files changed, in `/forja:start` and before a goldfish check, a deploy or a job setup, never inline in the runner's loop.
 
 ## UI contract
 

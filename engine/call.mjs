@@ -33,7 +33,7 @@ export async function run(argv) {
   if (cmd === 'log') return KIND.test(n0 ?? '') && int(a[0]) !== null ? (bestEffort(() => logCall(cfg.paths.state, n0, int(a[0]), a[1] ?? 'call')) ? 0 : 1) : bad();
   if (n === null) return bad();
   const round = int(a.at(-1));
-  if (cmd === 'setup') setupJob(cfg, n);
+  if (cmd === 'setup') return step('setup', () => { setupJob(cfg, n); return { status: 'ok', note: 'ready' }; });
   else if (cmd === 'build' && ENTRY.test(a[0] ?? '') && round !== null) return step('build', () => build(cfg, n, a[0], round), 'build', a[0], round);
   else if (cmd === 'check' && ENTRY.test(a[0] ?? '') && round !== null) return step('check', () => check(cfg, n, a[0], round));
   else if (cmd === 'review' && KIND.test(a[0] ?? '') && ENTRY.test(a[1] ?? '') && round !== null) return step(`review-${a[0]}`, () => review(cfg, n, a[0], a[1], round), `review-${a[0]}`, a[1], round);

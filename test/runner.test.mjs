@@ -218,6 +218,15 @@ const launchReal = async (E, n, agent) => {
   await Promise.all([...ctx.pending]);
 };
 
+test('starting a spec agent syncs forja-main without running the dependency install', () => {
+  const E = mkEnv({ ...CONFIG, checks: { install: `node -e "require('fs').writeFileSync('installed.txt','x')"` } }), ctx = E.ctx({ launch: () => ({ pid: process.pid }) });
+  job(E, 12);
+  E.on(() => JSON.stringify({ title: 'T', body: 'b', author: { login: 'owner' } }));
+  startAgent(ctx, 12, { agent: 'spec', model: 'sonnet', issue: 12, round: 1, out: `${E.J(12)}/spec.md`, cwd: 'x', prompt: 'p' });
+  assert.ok(existsSync(`${E.cfg.paths.main}/README.md`));
+  assert.equal(existsSync(`${E.cfg.paths.main}/installed.txt`), false);
+});
+
 test('launch sends the process output to logFile, also through the Windows launcher', async () => {
   const E = mkEnv(), logFile = `${E.root}/state/logs/runner.log`, script = `${E.root}/say.mjs`;
   put(script, 'console.log("hello out"); console.error("hello err");');

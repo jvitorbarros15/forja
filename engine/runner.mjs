@@ -93,7 +93,7 @@ export function startAgent(ctx, issue, a) {
   if (a.agent === 'spec') {
     writeIssue(ctx, issue);
     // The spec reads the code in forja-main, so it must match origin; only a fast-forward, never a merge or reset.
-    try { ensureMain(cfg); } catch (e) { if (!existsSync(cfg.paths.main)) throw e; log(`forja-main did not advance: ${first(e)}`); }
+    try { ensureMain(cfg, { install: false }); } catch (e) { if (!existsSync(cfg.paths.main)) throw e; log(`forja-main did not advance: ${first(e)}`); }
   }
   let commit;
   if (role.reviewer) {
