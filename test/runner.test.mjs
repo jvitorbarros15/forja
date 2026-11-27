@@ -1,7 +1,7 @@
 // The runner: cycle, step executor, agent launcher and reaper. Each env is a temp git repo with a bare "origin";
 // claude is the fake CLI, gh is a fake function and agents/launchers are stubbed unless a test runs one for real. No network.
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
@@ -301,4 +301,18 @@ test('reapDead closes a command whose run ended while the board was busy, but no
   reapDead(ctx);
   assert.deepEqual(readJson(E.P.commands).map(c => c.status), ['done', 'running', 'running']);
   assert.equal(readJson(E.P.commands)[0].doneAt, ended);
+});
+
+test('reapDead keeps going when the commands file is busy: a dead run is still closed and the next cycle closes its command', () => {
+  const E = mkEnv(), ctx = E.ctx(), at = new Date(Date.now() - 60e3).toISOString();
+  put(`${E.state}/run-deploy-test.json`, { kind: 'deploy-test', pid: deadPid(), startedAt: at, status: 'running', issues: [43], ids: ['43'] });
+  put(E.P.commands, [{ id: 'c', status: 'running', action: 'deploy-test', jobId: '43', runAt: at }]);
+  put(`${E.P.commands}.lock`, '');
+  assert.doesNotThrow(() => reapDead(ctx));
+  assert.equal(readJson(`${E.state}/run-deploy-test.json`).status, 'failed');
+  assert.ok(E.logs.some(l => /commands not updated: board lock busy/.test(l)));
+  assert.equal(readJson(E.P.commands)[0].status, 'running');
+  rmSync(`${E.P.commands}.lock`, { force: true });
+  reapDead(ctx);
+  assert.equal(readJson(E.P.commands)[0].status, 'failed');
 });

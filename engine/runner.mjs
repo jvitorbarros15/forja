@@ -219,13 +219,15 @@ function markCommands(ctx, results) {
 // A deploy or test whose process died (PC or runner restarted) would show running forever; close it as failed on every card it touched.
 export function reapDead(ctx) {
   const { cfg, P, T, L, log } = ctx, state = cfg.paths.state;
+  // A busy commands file must not cut the cycle short: the run file is the record, and the next cycle closes what is left.
+  const edit = fn => { try { editCommands(ctx, fn); } catch (e) { log(`commands not updated: ${first(e)}`); } };
   for (const kind of DEPLOYS) {
     const file = `${state}/run-${kind}.json`, r = readJson(file, null);
     // A run that ended while the board was busy never closed its command: the run file is the record, a run older than the command is not.
     const raw = readJson(P.commands, []), open = (Array.isArray(raw) ? raw : raw.docs ?? raw.documents ?? []).some(c => (c.data ?? c).action === kind && (c.data ?? c).status === 'running');
     if (r && r.status !== 'running' && open) {
       const ended = (r.ids ?? (r.of ? [r.of] : r.issues ?? [])).map(String);
-      editCommands(ctx, c => c.action === kind && c.status === 'running' && ended.includes(String(c.jobId)) && Date.parse(r.endedAt) > Date.parse(c.runAt ?? 0) && Object.assign(c, { status: r.status === 'ok' ? 'done' : 'failed', doneAt: r.endedAt }));
+      edit(c => c.action === kind && c.status === 'running' && ended.includes(String(c.jobId)) && Date.parse(r.endedAt) > Date.parse(c.runAt ?? 0) && Object.assign(c, { status: r.status === 'ok' ? 'done' : 'failed', doneAt: r.endedAt }));
     }
     if (r?.status !== 'running' || alive(r.pid, r.startedAt, 'node')) continue;
     const test = kind === 'deploy-test', endedAt = new Date().toISOString();
@@ -243,7 +245,7 @@ export function reapDead(ctx) {
         writeJson(p, d);
       }
     }
-    editCommands(ctx, c => c.action === kind && c.status === 'running' && ids.includes(String(c.jobId)) && Object.assign(c, { status: 'failed', note: why, doneAt: endedAt }));
+    edit(c => c.action === kind && c.status === 'running' && ids.includes(String(c.jobId)) && Object.assign(c, { status: 'failed', note: why, doneAt: endedAt }));
     log(`${kind} dead (pid ${r.pid}) marked failed`);
   }
 }
