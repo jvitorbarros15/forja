@@ -1,0 +1,94 @@
+{
+  "repo": "jvitorbarros15/clareia",
+  "approvers": ["jvitorbarros15"],
+  "language": "pt-BR",
+  "checks": {
+    "install": "npm ci --ignore-scripts",
+    "typecheck": "npm run -s typecheck",
+    "test": "npm test",
+    "build": "npm run -s build:full -- --out dist --portraits data/private/portraits --data-root data/private/worktrees/historical-people/data --ceiling-root data --noindex",
+    "deployTest": "npm run -s deploy:test -- --portraits data/private/portraits --data-root data/private/worktrees/historical-people/data --ceiling-root data --dry-run",
+    "deploy": "npm run -s deploy:test -- --portraits data/private/portraits --data-root data/private/worktrees/historical-people/data --ceiling-root data --yes"
+  },
+  "ui": {
+    "paths": ["real/**", "**/*.css"],
+    "serve": "node node_modules/tsx/dist/cli.mjs src/server.ts",
+    "verify": "npm run -s verify:ui",
+    "widths": [390, 1440]
+  },
+  "tiers": [
+    {
+      "id": "A",
+      "describe": "Only tests, docs, markdown or purely visual CSS. Cannot change site behavior or published numbers.",
+      "paths": ["tests/**", "docs/**", "**/*.md", "**/*.css"],
+      "reviews": ["code"],
+      "approval": "auto",
+      "autoDeploy": true
+    },
+    {
+      "id": "B",
+      "describe": "Site logic, prerender, UI behavior, copy or markup in the site, verify scripts, or a check that only adds a refusal (fails closed).",
+      "reviews": ["code", "ui?", "ponytail"],
+      "approval": "owner",
+      "autoDeploy": false
+    },
+    {
+      "id": "C",
+      "describe": "Changes how money is computed or reconciled, loosens a CPF or privacy check, touches supplier names, data collection, secrets, deploy or CI steps.",
+      "reviews": ["code", "ponytail", "security", "data"],
+      "approval": "owner",
+      "autoDeploy": false,
+      "strongSpec": true,
+      "strongApprover": true
+    }
+  ],
+  "models": {
+    "spec": ["claude:sonnet"],
+    "specStrong": ["claude:opus"],
+    "build": {
+      "exact": ["local:exact"],
+      "small": ["claude:haiku"],
+      "medium": ["codex:sol", "agy:hydrogen"],
+      "hard": ["agy:neon", "codex:sol"]
+    },
+    "buildEscalation": ["exact", "small", "medium", "hard"],
+    "review": {
+      "code": ["agy:neon", "codex:sol"],
+      "ui": ["agy:hydrogen", "codex:sol"],
+      "ponytail": ["claude:sonnet"],
+      "security": ["claude:opus"],
+      "data": ["claude:fable"]
+    },
+    "goldfish": ["agy:hydrogen", "codex:sol"],
+    "approver": ["claude:sonnet"],
+    "approverStrong": ["claude:opus"],
+    "advisor": ["claude:sonnet"]
+  },
+  "vendors": {
+    "codex": { "enabled": true, "bin": "codex", "models": { "sol": "gpt-6.2-sol" } },
+    "agy": {
+      "enabled": true,
+      "bin": "agy",
+      "models": { "hydrogen": "gemini-4-hydrogen-medium", "neon": "gemini-4-neon-high" }
+    },
+    "ollama": { "enabled": true, "url": "http://127.0.0.1:11434", "triageModel": "gemma4:e4b" }
+  },
+  "reviewers": {
+    "data": {
+      "agent": ".forja/agents/review-data.md",
+      "skills": [],
+      "allow": ["Bash(npm test)", "Bash(npm run -s build:full:*)"]
+    }
+  },
+  "deferredReviews": ["ponytail", "security", "data"],
+  "privacy": {
+    "denyRead": ["**/.env*", "data/**"],
+    "promptRules": [
+      "Never print a CPF.",
+      "Never print a withheld supplier name.",
+      "Never decrypt captures.",
+      "Never read or print .env files, the ~/.clareia folder or the vault key.",
+      "Never open files under data/ directly."
+    ]
+  }
+}
