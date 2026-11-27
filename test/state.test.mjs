@@ -145,7 +145,7 @@ test('upsertWorker merges by id and sums tokens in the doc', () => {
   } finally { cleanup(); }
 });
 
-test('concurrent setJob calls keep both changes', async () => {
+test('concurrent setJob calls keep both changes', { timeout: 60e3 }, async () => {
   const { dir, cfg, cleanup } = setup();
   try {
     createBoard(cfg).setJob(1, { stage: 'build' });
@@ -198,6 +198,18 @@ test('locked throws when the lock stays busy and removes one a dead process left
   } finally { cleanup(); }
 });
 
+test('locked gives up on the clock, not after a count of sleeps, so slow sleeps never outlast the stale age', () => {
+  const { dir, cleanup } = setup(), wait = Atomics.wait;
+  Atomics.wait = (a, i, v, ms) => wait(a, i, v, ms * 4);
+  try {
+    const file = path.join(dir, 'x.json'), at = Date.now();
+    fs.writeFileSync(`${file}.lock`, '');
+    assert.throws(() => locked(file, () => 1), /board lock busy/);
+    assert.ok(Date.now() - at < 8e3, `waited ${Date.now() - at} ms`);
+    assert.ok(fs.existsSync(`${file}.lock`));
+  } finally { Atomics.wait = wait; cleanup(); }
+});
+
 test('bestEffort retries a busy lock, gives up quietly, and reports whether it wrote', () => {
   const busy = new Error('board lock busy: x');
   let n = 0;
@@ -211,7 +223,7 @@ test('bestEffort retries a busy lock, gives up quietly, and reports whether it w
   assert.equal(n, 1);
 });
 
-test('a long lock is never taken from a live holder or a holder that cannot be identified, and is taken from a dead one', async () => {
+test('a long lock is never taken from a live holder or a holder that cannot be identified, and is taken from a dead one', { timeout: 60e3 }, async () => {
   const { dir, cleanup } = setup(), holder = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { stdio: 'ignore' });
   try {
     const file = path.join(dir, 'x.json'), lock = `${file}.lock`;
@@ -245,7 +257,7 @@ test('pruneCommands drops finished commands older than 7 days, caps finished at 
   assert.equal(kept.at(-1).id, 'd204');
 });
 
-test('gone is true only for a process known not to exist', async () => {
+test('gone is true only for a process known not to exist', { timeout: 60e3 }, async () => {
   const { gone } = await import('../engine/platform.mjs'), at = Date.now(), dead = spawn(process.execPath, ['-e', '0']);
   await new Promise(r => dead.on('exit', r));
   assert.equal(gone(process.pid, at, 'node'), false);

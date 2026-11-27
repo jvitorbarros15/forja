@@ -33,7 +33,7 @@ export const writeJson = (p, v) => {
 // `long` is for work that takes minutes (an install): it waits and expires after 45 minutes (`waitMs` shortens the wait), and a
 // lock whose holder (its pid is written inside) is known to be gone is taken over at once.
 export function locked(file, fn, { long = false, waitMs = long ? 45 * 60e3 : 5e3 } = {}) {
-  const lock = `${file}.lock`, stale = long ? 45 * 60e3 : 10e3, step = long ? 250 : 25, tries = waitMs / step;
+  const lock = `${file}.lock`, stale = long ? 45 * 60e3 : 10e3, step = long ? 250 : 25;
   // A lock that vanished between the failed open and this look has age 0: only a lock still there and old is removed,
   // or the removal could take the lock another process has just created.
   const age = () => { try { return Date.now() - statSync(lock).mtimeMs; } catch { return 0; } };
@@ -44,8 +44,11 @@ export function locked(file, fn, { long = false, waitMs = long ? 45 * 60e3 : 5e3
     return long && pid > 0 && gone(pid, Number(seen.split('@')[1]), 'node') && look() === seen;
   };
   mkdirSync(dirname(lock), { recursive: true });
+  // The wait is measured on the clock, not counted in sleeps: a sleep can last longer than asked (a loaded macOS runner waited 10 s for what should be 5),
+  // and a count of them would outlast the stale age, so a live holder's lock would be taken.
+  const until = Date.now() + waitMs;
   let fd = null;
-  for (let i = 0; i < tries && fd === null; i++) try { fd = openSync(lock, 'wx'); } catch { if (age() > stale || orphan()) try { rmSync(lock, { force: true }); } catch {} else pause(step); }
+  for (let first = true; fd === null && (first || Date.now() < until); first = false) try { fd = openSync(lock, 'wx'); } catch { if (age() > stale || orphan()) try { rmSync(lock, { force: true }); } catch {} else pause(step); }
   if (fd === null) throw new Error(`board lock busy: ${lock}`);
   // A lock Windows refuses to delete right now is left to expire; the write itself is already done.
   try { writeSync(fd, String(process.pid)); return fn(); } finally { closeSync(fd); try { rmSync(lock, { force: true, maxRetries: 5, retryDelay: 20 }); } catch {} }
