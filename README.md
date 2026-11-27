@@ -1,4 +1,8 @@
-# Forja
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/logo-light.svg">
+  <img alt="Forja" src="docs/logo-light.svg" width="220">
+</picture>
 
 Forja is a software factory for your GitHub repository. You label an issue, and Forja writes a spec, builds the change in its own git worktree, has a different model review it, opens a pull request, waits for your approval, and merges it. You watch and approve from a local dashboard or from PR comments.
 
