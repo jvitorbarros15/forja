@@ -18,6 +18,12 @@ function mkCfg(over = {}) {
   return cfg;
 }
 const realPlugin = (cfg) => { cfg.paths.plugin = path.resolve(import.meta.dirname, '..').replace(/\\/g, '/'); return cfg; };
+const pluginWithoutSkills = (cfg) => {
+  const plugin = tmp();
+  fs.cpSync(path.resolve(import.meta.dirname, '..', 'agents'), `${plugin}/agents`, { recursive: true });
+  cfg.paths.plugin = plugin;
+  return cfg;
+};
 
 test('registry has the built-in roles with their slots and outputs', () => {
   const r = roles(mkCfg());
@@ -103,7 +109,7 @@ test('override template wins', () => {
 });
 
 test('renderAgent inlines skills and fills placeholders', () => {
-  const cfg = realPlugin(mkCfg());
+  const cfg = pluginWithoutSkills(mkCfg());
   cfg.privacy.promptRules = ['Never print customer ids.'];
   cfg.checks.test = 'make test';
   const home = tmp();
@@ -144,7 +150,7 @@ test('renderAgent fills the placeholders from the config', () => {
 });
 
 test('renderAgent throws on missing skill', () => {
-  const cfg = realPlugin(mkCfg());
+  const cfg = pluginWithoutSkills(mkCfg());
   assert.throws(() => renderAgent(cfg, roles(cfg)['review-security'], tmp()), /skill security-audit missing for review-security/);
 });
 
