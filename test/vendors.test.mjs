@@ -9,6 +9,7 @@ import { roles } from '../engine/registry.mjs';
 import { DEFAULTS } from '../engine/config.mjs';
 import { IS_WIN } from '../engine/platform.mjs';
 import { exec } from '../engine/vendors/proc.mjs';
+import { bin as claudeBin } from '../engine/vendors/claude.mjs';
 
 const FAKE = path.resolve(import.meta.dirname, 'fixtures/fake-cli.mjs');
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'forja-vendors-')).replace(/\\/g, '/');
@@ -256,4 +257,15 @@ test('runAgent kills a run that outlives the agent timeout and reports the pid',
   assert.ok(pid > 0);
   assert.notEqual(r.code, 0);
   assert.ok(Date.now() - t0 < 20000);
+});
+
+test('claude bin: a configured name stays as it is; on Windows the native install path wins over the bare name', () => {
+  assert.equal(claudeBin({ vendors: { claude: { bin: '/x/claude' } } }, {}), '/x/claude');
+  assert.equal(claudeBin({}, {}), 'claude');
+  if (!IS_WIN) return;
+  const home = tmp(), exe = `${home}/.local/bin/claude.exe`;
+  fs.mkdirSync(path.dirname(exe), { recursive: true });
+  fs.writeFileSync(exe, '');
+  assert.equal(claudeBin({}, { USERPROFILE: home }), exe);
+  assert.equal(claudeBin({ vendors: { claude: { bin: 'other' } } }, { USERPROFILE: home }), 'other');
 });

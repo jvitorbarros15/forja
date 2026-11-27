@@ -6,10 +6,10 @@ import { exec } from './proc.mjs';
 
 // On Windows the real binary is claude.exe. Order: an existing configured file, the native installer path, the npm
 // package path, then proc.mjs resolves the bare name on PATH (.exe first, then the npm shim's target).
-function bin(cfg) {
+export function bin(cfg, env = process.env) {
   const b = cfg.vendors?.claude?.bin ?? 'claude';
   if (!IS_WIN || b !== 'claude') return b;
-  const known = [`${process.env.USERPROFILE}/.local/bin/claude.exe`, `${process.env.APPDATA}/npm/node_modules/@anthropic-ai/claude-code/bin/claude.exe`];
+  const known = [`${env.USERPROFILE}/.local/bin/claude.exe`, `${env.APPDATA}/npm/node_modules/@anthropic-ai/claude-code/bin/claude.exe`];
   return known.find((f) => fs.existsSync(f)) ?? b;
 }
 

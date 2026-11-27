@@ -11,6 +11,7 @@ import { t } from './i18n.mjs';
 import { IS_WIN, alive, killOne, killTree } from './platform.mjs';
 import { renderAgent, roles } from './registry.mjs';
 import { launch as realLaunch } from './runner.mjs';
+import { bin as claudeBinOf } from './vendors/claude.mjs';
 import { dashboardUrl } from './server.mjs';
 import { gh as realGh, git, read, readJson, writeJson } from './state.mjs';
 import { ensureMain } from './worktree.mjs';
@@ -34,8 +35,7 @@ function which(name, env = process.env, extraDirs = []) {
 
 function resolveBin(bin, project, env) {
   if (/[\\/]/.test(bin)) return [bin, `${bin}.exe`, `${bin}.cmd`].map(b => path.resolve(project, b)).find(existsSync) ?? null;
-  const known = IS_WIN && bin === 'claude' ? [`${env.USERPROFILE}/.local/bin/claude.exe`, `${env.APPDATA}/npm/node_modules/@anthropic-ai/claude-code/bin/claude.exe`].find(existsSync) : null;
-  return which(bin, env) ?? known ?? null;
+  return which(bin, env);
 }
 
 async function playwrightOk(project) {
@@ -259,7 +259,7 @@ async function doctor(project, o, L, out) {
 
   let cfg = null;
   try { cfg = loadProjectConfig(project); add('ok', L('cli.doctor.config')); } catch (e) { add('FAIL', `${L('cli.doctor.configBad')}\n${e instanceof ConfigError ? e.errors.map(x => `  ${x}`).join('\n') : first(e)}`); }
-  const claudeBin = cfg?.vendors?.claude?.bin ?? 'claude';
+  const claudeBin = claudeBinOf(cfg ?? {}, env);
   ok(!!resolveBin(claudeBin, project, env), L('cli.doctor.claude', { bin: claudeBin }), L('cli.doctor.claudeMissing', { bin: claudeBin }));
 
   if (cfg) {
