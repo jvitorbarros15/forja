@@ -27,7 +27,12 @@ It runs as a Claude Code plugin with a small Node 22 engine and no npm dependenc
  "redo" loops back to build (up to limits.rounds); stuck jobs go to needs-you
 ```
 
-Each issue is sorted into a risk tier first. The tier decides which reviews run and who must approve. A tier with `approval: "auto"` merges itself once CI is green; other tiers wait for your approval. A tier can also limit which paths a change may touch.
+Each issue is sorted into a risk tier first. The tier decides which reviews run and who must approve. A tier with `approval: "auto"` merges itself once CI is green, except when the diff touches a protected path (see the safety model), which always waits for you; other tiers wait for your approval. A tier can also limit which paths a change may touch.
+
+Two of the reviewers have names worth knowing:
+
+- **ponytail** is the code-quality review: is the logic right, is it safe, does it hold under real load, is risky code tested, and is every line needed.
+- **goldfish** is a blind check of the spec before any code is built. A different model sees only the spec and the repo, not the issue thread, and tries to break the spec: missed cases, wrong files, criteria that cannot be checked.
 
 ## Install
 
@@ -39,7 +44,7 @@ In Claude Code, inside any git repository with a GitHub remote:
 /forja:setup
 ```
 
-`/forja:setup` detects what is installed, asks before turning on optional vendors, and writes `.forja/config.json`. Commit that file and merge it to your main branch, then start the engine:
+`/forja:setup` detects what is installed, asks before turning on optional vendors, and writes `.forja/config.json`. Commit that file and merge it to your default branch, then start the engine:
 
 ```
 /forja:start
@@ -65,6 +70,8 @@ Optional:
 - Playwright with Chromium, for UI screenshots and the `ui` review
 
 Vendors are off until you enable them in `.forja/config.json`. Forja works with Claude alone.
+
+Model chains are lists like `["claude:sonnet", "codex:sol"]`. The builder, the reviewers and goldfish accept any enabled vendor. The spec, approver and advisor roles must be `claude:*` entries: they run as restricted Claude agents with tool allowlists (they read files and may run only a short list of commands, with no network), and no other vendor's CLI can enforce that.
 
 ## Safety model
 
