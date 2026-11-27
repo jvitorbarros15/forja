@@ -2,5 +2,10 @@
   "name": "forja",
   "version": "0.1.0",
   "description": "Issue-to-PR software factory with tiered reviews and a local dashboard",
+  "author": {
+    "name": "João Vitor Barros"
+  },
+  "repository": "https://github.com/jvitorbarros15/forja",
+  "homepage": "https://github.com/jvitorbarros15/forja",
   "license": "MIT"
 }

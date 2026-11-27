@@ -134,13 +134,13 @@ Each command runs in the worktree. `null` skips the check. `deployTest` runs aut
   "ui": {
     "paths": ["src/components/**", "**/*.css"],
     "serve": "npm run -s dev -- --port $PORT",
-    "verify": "npm run -s screenshots -- $BASE_URL",
+    "verify": "npm run -s e2e",
     "widths": [390, 1440]
   }
 }
 ```
 
-A diff that touches `ui.paths` counts as a UI change. Screenshots are taken with Playwright's chromium, which `/forja:doctor` checks for; `ui.verify` is the command that takes `$BASE_URL` and writes them. Without `ui`, or without Playwright, the `ui` review is skipped and the dashboard says why.
+A diff that touches `ui.paths` counts as a UI change. Forja starts `ui.serve` itself and takes the screenshots itself with Playwright's chromium, which `/forja:doctor` checks for. `ui.verify` is optional: a command that must exit 0 to pass and non-zero to fail, run once the app answers. The port reaches `ui.serve` as the environment variable `PORT` and the app's address reaches `ui.verify` as `BASE_URL`: write `$PORT` and `$BASE_URL` in sh, `%PORT%` and `%BASE_URL%` in cmd.exe. Without `ui`, or without Playwright, the `ui` review is skipped and the dashboard says why.
 
 ## Privacy
 
@@ -174,7 +174,7 @@ A diff that touches `ui.paths` counts as a UI change. Screenshots are taken with
 - `language`: `en` or `pt-BR`. Strings shown to people come from `engine/i18n/<lang>.json`.
 - `defaultBranch`: the branch every change merges into. Default `main`; `/forja:setup` detects it.
 - `intakeLabel`: the label that starts a job. Default `forja`.
-- `queue.max`: how many jobs build at once. Default `3`.
+- `queue.max`: how many open issues the queue feeder keeps labeled at once (issues listed in `queue.json`). It does not limit issues you label by hand. Default `3`.
 - `limits.rounds`: review rounds before a job goes to `needs-you`. Default `3`.
 - `goldfish`: boolean switch (default `true`) for a check where a model that sees only the spec and the repo tries to break it. Its model chain is `models.goldfish`. It runs only on tiers above the lowest, and never on the spec's own model.
 - `notify.desktop`: desktop notifications when a job needs the owner.
