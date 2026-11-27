@@ -592,7 +592,7 @@ test('the exact executor refuses paths outside the worktree, protected paths and
   for (const file of targets) {
     put(`${E.J(60)}/spec.md`, SPEC(60, edit(file, 'a', 'b')));
     await build(E.cfg, 60, 'local:exact', 1);
-    assert.match(rd(`${E.J(60)}/build.md`), /^BUILD: FAILED[\s\S]*no usable Edits block/, file);
+    assert.match(rd(`${E.J(60)}/build.md`), /^BUILD: FAILED[\s\S]*Edits block names \S+, which the exact executor may not change/, file);
   }
   assert.equal(rd(secret), 'a');
   assert.equal(rd(`${wt}/.forja/config.json`), 'a');
@@ -689,7 +689,7 @@ test('the exact executor cannot reach a protected folder through its Windows 8.3
   for (const file of [`${short}/config.json`, `${short.toLowerCase()}/config.json`, '.git/config', 'sub/.git/x']) {
     put(`${E.J(67)}/spec.md`, SPEC(67, edit(file, 'a', 'b')));
     await build(E.cfg, 67, 'local:exact', 1);
-    assert.match(rd(`${E.J(67)}/build.md`), /^BUILD: FAILED[\s\S]*no usable Edits block/, file);
+    assert.match(rd(`${E.J(67)}/build.md`), /^BUILD: FAILED[\s\S]*Edits block names \S+, which the exact executor may not change/, file);
   }
   assert.equal(rd(`${wt}/.forja/config.json`), 'a');
   assert.equal(rd(`${wt}/sub/.git/x`), 'a');

@@ -64,7 +64,9 @@ function inside(wt, file) {
 function exact(cfg, n, wt, spec) {
   const L = (k, v) => t(cfg.language, k, v), list = edits(spec);
   // Every path is judged before any file is read.
-  if (!list.length || list.some(e => !inside(wt, e.file))) return L('err.noExactEdits');
+  if (!list.length) return L('err.noExactEdits');
+  const out = list.find(e => !inside(wt, e.file));
+  if (out) return L('err.exactPath', { file: out.file });
   const todo = list.filter(e => !applied(wt, e));
   const bad = todo.find(e => count(text(wt, e.file), e.before) !== 1);
   if (bad) return L('err.exactAmbiguous', { count: count(text(wt, bad.file), bad.before), file: bad.file });

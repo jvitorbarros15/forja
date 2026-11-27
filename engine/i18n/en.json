@@ -134,6 +134,7 @@
   "err.vendorStart": "{entry} could not be started; check its bin in .forja/config.json.",
   "err.execFailed": "{entry} exited with an error: {err}",
   "err.noExactEdits": "Spec has no usable Edits block for an exact executor.",
+  "err.exactPath": "The spec's Edits block names {file}, which the exact executor may not change (outside the worktree, protected, a dependency folder or .git).",
   "err.exactAmbiguous": "BEFORE text appears {count} times in {file}; it must appear once.",
   "err.unknownLocal": "Unknown local executor {entry}.",
   "err.reviewChanged": "{entry} changed the worktree during the {kind} review.",

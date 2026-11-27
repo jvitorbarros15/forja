@@ -134,6 +134,7 @@
   "err.vendorStart": "Não foi possível iniciar {entry}; confira o bin dele em .forja/config.json.",
   "err.execFailed": "{entry} terminou com erro: {err}",
   "err.noExactEdits": "A especificação não tem um bloco Edits utilizável para o executor exato.",
+  "err.exactPath": "O bloco Edits da especificação cita {file}, que o executor exato não pode alterar (fora do worktree, protegido, pasta de dependências ou .git).",
   "err.exactAmbiguous": "O texto BEFORE aparece {count} vezes em {file}; precisa aparecer uma vez.",
   "err.unknownLocal": "Executor local desconhecido: {entry}.",
   "err.reviewChanged": "{entry} mudou a worktree durante a revisão {kind}.",
