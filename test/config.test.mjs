@@ -44,6 +44,18 @@ test('an unsupported vendor such as opencode is not a valid chain entry', () => 
   try { assert.throws(() => loadConfig(dir), (e) => e.errors.some((s) => /bad chain entry "opencode:x"/.test(s))); } finally { cleanup(dir); }
 });
 
+test('tier paths must be an array of strings, and the config file a JSON object', () => {
+  for (const paths of ['docs/**', [1], [''], {}]) {
+    const dir = project({ ...base, tiers: [{ id: 'A', describe: 'x', paths, reviews: ['code'], approval: 'owner' }] });
+    try { assert.throws(() => loadConfig(dir), (e) => e.errors.some((s) => /tier A paths must be an array of strings/.test(s)), JSON.stringify(paths)); } finally { cleanup(dir); }
+  }
+  for (const text of ['[]', 'null', '3', '"x"']) {
+    const dir = project(base);
+    fs.writeFileSync(path.join(dir, '.forja', 'config.json'), text);
+    try { assert.throws(() => loadConfig(dir), (e) => e instanceof ConfigError && /must be a JSON object/.test(e.errors[0]), text); } finally { cleanup(dir); }
+  }
+});
+
 test('pr.requireCi defaults to false and must be a boolean', () => {
   assert.equal(DEFAULTS.pr.requireCi, false);
   for (const [value, ok] of [[true, true], [false, true], ['yes', false], [1, false]]) {

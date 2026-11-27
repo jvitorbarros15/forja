@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { t } from './i18n.mjs';
 import { parseEntry } from './models.mjs';
-import { bestEffort, gh as realGh, field, git, locked, paths, read, readJson, writeJson } from './state.mjs';
+import { bestEffort, gh as realGh, field, git, locked, paths, read, readCommands, readJson, writeJson } from './state.mjs';
 import { createTick } from './tick.mjs';
 import { tail } from './vendors/proc.mjs';
 import { ensureMain, expand, removeJob, sh } from './worktree.mjs';
@@ -103,13 +103,12 @@ export async function runDeploy(cfg, test, ids, { gh = realGh, T = createTick(cf
     });
   }
   bestEffort(() => locked(P.commands, () => {
-    const raw = readJson(P.commands, []), list = Array.isArray(raw) ? raw : raw.docs ?? raw.documents ?? [];
+    const list = readCommands(P.commands);
     let hit = false;
-    for (const c0 of list) {
-      const c = c0.data ?? c0;
+    for (const c of list) {
       if (c.action === cmd && c.status === 'running' && ids.includes(String(c.jobId))) { c.status = ok ? 'done' : 'failed'; c.doneAt = r.endedAt; hit = true; }
     }
-    if (hit) writeJson(P.commands, raw);
+    if (hit) writeJson(P.commands, list);
   }));
   return res;
 }

@@ -90,6 +90,7 @@ export function validateConfig(cfg) {
     seen.add(t.id);
     if (typeof t.describe !== 'string' || !t.describe) errors.push(`tier ${t.id} needs a describe text`);
     if (!['owner', 'auto'].includes(t.approval)) errors.push(`tier ${t.id} approval must be "owner" or "auto"`);
+    if (t.paths !== undefined && !(Array.isArray(t.paths) && t.paths.every((p) => typeof p === 'string' && p))) errors.push(`tier ${t.id} paths must be an array of strings`);
     const hasPaths = Array.isArray(t.paths) && t.paths.length > 0;
     if ((t.approval === 'auto' || t.autoDeploy === true) && !hasPaths) {
       errors.push(`tier ${t.id} uses auto approval or autoDeploy but has no paths`);
@@ -147,6 +148,7 @@ export function loadConfig(projectDir, { mainDir, pluginRoot } = {}) {
   let user = {};
   if (fs.existsSync(file)) {
     try { user = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { throw new ConfigError([`${fwd(file)} is not valid JSON`]); }
+    if (!isObj(user)) throw new ConfigError([`${fwd(file)} must be a JSON object`]);
   }
   const cfg = merge(structuredClone(DEFAULTS), user);
   for (const k of Object.keys(cfg.reviewers ?? {})) cfg.models.review[k] ??= ['claude:sonnet'];

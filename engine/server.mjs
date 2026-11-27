@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { strings, t } from './i18n.mjs';
 import { alive } from './platform.mjs';
 import { loadProjectConfig } from './config.mjs';
-import { locked, paths, read, readJson, writeJson } from './state.mjs';
+import { idsOf, locked, paths, read, readJson, writeJson } from './state.mjs';
 import { ID_RE } from './tick.mjs';
 import { chat } from './triage.mjs';
 
@@ -57,7 +57,7 @@ export async function serve(cfg, o = {}) {
   // What the page may know about the last deploy and the last deploy test: the plain note, never the raw output kept in `detail`.
   const deploys = () => Object.fromEntries(Object.entries(RUNS).map(([file, key]) => {
     const r = rj(runFile(file), null);
-    return [key, r && { status: r.status, startedAt: r.startedAt ?? null, endedAt: r.endedAt ?? null, note: String(r.note ?? '').slice(0, 600), ids: (r.ids ?? (r.of ? [r.of] : r.issues ?? [])).map(String), tries: r.tries ?? 1, transient: !!r.transient }];
+    return [key, r && { status: r.status, startedAt: r.startedAt ?? null, endedAt: r.endedAt ?? null, note: String(r.note ?? '').slice(0, 600), ids: idsOf(r), tries: r.tries ?? 1, transient: !!r.transient }];
   }));
   const config = () => ({
     repo: R, approvers: cfg.approvers, language: cfg.language, defaultBranch: cfg.defaultBranch, deploy: !!cfg.checks.deploy,

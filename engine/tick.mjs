@@ -9,7 +9,7 @@ import { aliases, t } from './i18n.mjs';
 import { multiVendor, nextRung, parseEntry, pick, quota as readQuota } from './models.mjs';
 import { alive } from './platform.mjs';
 import { roles } from './registry.mjs';
-import { createBoard, field, findingFiles, gh as realGh, locked, paths, read, readJson, writeJson } from './state.mjs';
+import { createBoard, field, findingFiles, gh as realGh, locked, paths, read, readCommands, readJson, writeJson } from './state.mjs';
 
 const MIN = 60e3, HOUR = 3600e3, STALE = 2 * HOUR, NO_CI_WAIT = 3 * MIN;
 export const ID_RE = /^(\d{1,9}|[a-z0-9-]{1,40})$/i;
@@ -474,9 +474,8 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
   const approverModel = (job, q) => modelOf(tierOf(cfg, job.tier)?.strongApprover ? cfg.models.approverStrong : cfg.models.approver, q);
 
   function commandSteps(b, q) {
-    const raw = readJson(P.commands, []), out = [], seen = new Set();
-    for (const c0 of Array.isArray(raw) ? raw : raw.docs ?? raw.documents ?? []) {
-      const c = { ...(c0.data ?? c0), id: c0.id ?? c0.doc_id };
+    const out = [], seen = new Set();
+    for (const c of readCommands(P.commands)) {
       if (c.status !== 'pending') continue;
       const job = b.jobs.find(j => String(j.issue) === String(c.jobId));
       // An approve whose PR step failed stays pending and runs again when the job's wait ends.

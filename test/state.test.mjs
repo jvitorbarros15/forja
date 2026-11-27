@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { loadConfig } from '../engine/config.mjs';
-import { bestEffort, createBoard, locked, paths, readJson } from '../engine/state.mjs';
+import { bestEffort, createBoard, idsOf, locked, paths, readCommands, readJson } from '../engine/state.mjs';
 
 const STATE_URL = new URL('../engine/state.mjs', import.meta.url).href;
 const CONFIG_URL = new URL('../engine/config.mjs', import.meta.url).href;
@@ -66,6 +66,29 @@ test('setJob keeps need and ai on failed', () => {
     board.setJob(1, { stage: 'failed', need: { why: 'w', action: 'redo' }, ai: { x: 1 } });
     const job = readJson(P.board).jobs[0];
     assert.ok(job.need && job.ai);
+  } finally { cleanup(); }
+});
+
+test('a job keeps its last 200 events', () => {
+  const { cfg, P, cleanup } = setup();
+  try {
+    const board = createBoard(cfg);
+    for (let i = 0; i < 205; i++) board.setJob(1, {}, `event ${i}`);
+    const events = readJson(P.board).jobs[0].events;
+    assert.deepEqual([events.length, events[0].text, events.at(-1).text], [200, 'event 5', 'event 204']);
+  } finally { cleanup(); }
+});
+
+test('readCommands accepts only an array, and idsOf only reads ids', () => {
+  const { P, cleanup } = setup();
+  try {
+    assert.deepEqual(readCommands(P.commands), []);
+    fs.mkdirSync(path.dirname(P.commands), { recursive: true });
+    fs.writeFileSync(P.commands, JSON.stringify({ docs: [{ id: 'c1' }] }));
+    assert.deepEqual(readCommands(P.commands), []);
+    fs.writeFileSync(P.commands, JSON.stringify([{ id: 'c1' }]));
+    assert.deepEqual(readCommands(P.commands), [{ id: 'c1' }]);
+    assert.deepEqual([idsOf({ ids: [7, '8'] }), idsOf({ of: '9' }), idsOf(null)], [['7', '8'], [], []]);
   } finally { cleanup(); }
 });
 

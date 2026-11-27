@@ -17,7 +17,7 @@ export function parseEntry(entry) {
 }
 
 export function quota(stateDir, now = Date.now()) {
-  const calls = readQuota(stateDir).calls;
+  const calls = readQuota(stateDir).calls ?? [];
   const out = {};
   for (const p of new Set(['claude', ...calls.map((c) => c.p)])) {
     const mine = calls.filter((c) => c.p === p);
@@ -37,7 +37,7 @@ export function logCall(stateDir, vendor, issue, kind, limited = false, until = 
     const q = readQuota(stateDir);
     const cut = Date.now() - 192 * HOUR;
     q.calls = [
-      ...q.calls.filter((c) => Date.parse(c.at) > cut),
+      ...(q.calls ?? []).filter((c) => Date.parse(c.at) > cut),
       { p: vendor, at: new Date().toISOString(), issue, kind, limited, ...(until ? { until } : {}) },
     ];
     writeJson(file(stateDir), q);

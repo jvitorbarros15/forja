@@ -5,6 +5,9 @@ import { gone } from './platform.mjs';
 
 export const read = p => (existsSync(p) ? readFileSync(p, 'utf8') : '');
 export const readJson = (p, d) => (existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')) : d);
+// commands.json is an array of flat commands; anything else is empty. Run files name the cards they touched in `ids`.
+export const readCommands = file => (a => (Array.isArray(a) ? a : []))(readJson(file, []));
+export const idsOf = run => (run?.ids ?? []).map(String);
 const pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 export const writeJson = (p, v) => {
   mkdirSync(dirname(p), { recursive: true });
@@ -115,7 +118,7 @@ export function createBoard(cfg, { relabel = () => {}, needOf = null } = {}) {
       if ('stage' in patch && patch.stage !== prev.stage) job.stageSince = now;
       if (['stage', 'round', 'executor', 'fails'].some(k => k in patch && patch[k] !== prev[k]) || patch.running?.length) job.since = now;
       const text = typeof event === 'function' ? event() : event;
-      if (text) job.events.push({ at: now, text });
+      if (text) job.events = [...(job.events ?? []), { at: now, text }].slice(-200);
       writeJson(P.board, b);
       return { job, prev };
     });

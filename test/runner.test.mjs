@@ -147,7 +147,7 @@ test('execStep write and run steps', () => {
   assert.equal(rd(`${E.J(3)}/round-1/owner.md`), 'fix it');
   const b = readJson(E.P.board).jobs[0];
   assert.equal(b.stage, 'pr');
-  assert.equal(b.pr, '7');
+  assert.equal(b.pr, 7);
   assert.equal(b.events.at(-1).text, 'PR opened');
 
   const bad = execStep(ctx, { issue: 3, step: 'open-pr', after: true, set: { stage: 'merged' }, do: [{ run: [process.execPath, '-e', 'process.exit(2)'] }] });

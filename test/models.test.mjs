@@ -61,6 +61,16 @@ test('multiVendor ignores claude and local, honours enabled vendors', () => {
   assert.equal(multiVendor({ vendors: { claude: { enabled: true }, local: { enabled: true } } }), false);
 });
 
+test('a quota file without calls counts as empty and is rebuilt by the next call', () => {
+  const dir = tmp();
+  try {
+    fs.writeFileSync(path.join(dir, 'quota.json'), '{}');
+    assert.equal(quota(dir).claude.h5, 0);
+    logCall(dir, 'codex', 7, 'build');
+    assert.equal(quota(dir).codex.h5, 1);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('logCall and quota count calls per vendor and window', () => {
   const dir = tmp();
   try {

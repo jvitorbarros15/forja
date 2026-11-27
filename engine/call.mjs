@@ -9,7 +9,7 @@ import { check } from './checks.mjs';
 import { loadProjectConfig } from './config.mjs';
 import { build, goldfish, review } from './external.mjs';
 import { logCall } from './models.mjs';
-import { ciLog, deploy, deployTest, pr, runDeploy, tracked } from './ship.mjs';
+import { ciLog, pr, runDeploy, tracked } from './ship.mjs';
 import { ID_RE } from './tick.mjs';
 import { triage } from './triage.mjs';
 import { bestEffort } from './state.mjs';

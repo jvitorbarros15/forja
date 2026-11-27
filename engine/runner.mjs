@@ -11,7 +11,7 @@ import { t } from './i18n.mjs';
 import { logCall } from './models.mjs';
 import { IS_WIN, alive, killTree, notify as platformNotify, spawnDetached } from './platform.mjs';
 import { roles } from './registry.mjs';
-import { bestEffort, gh as realGh, git, locked, paths, read, readJson, writeJson } from './state.mjs';
+import { bestEffort, gh as realGh, git, idsOf, locked, paths, read, readCommands, readJson, writeJson } from './state.mjs';
 import { createTick } from './tick.mjs';
 import { runAgent } from './vendors/claude.mjs';
 import { cleanMain, ensureMain } from './worktree.mjs';
@@ -143,10 +143,10 @@ const brief = out => {
 function editCommands(ctx, fn) {
   const file = ctx.P.commands;
   locked(file, () => {
-    const raw = readJson(file, []), list = Array.isArray(raw) ? raw : raw.docs ?? raw.documents ?? [];
+    const list = readCommands(file);
     let hit = false;
-    for (const c0 of list) if (fn(c0.data ?? c0, c0.id ?? c0.doc_id ?? c0.data?.id)) hit = true;
-    if (hit) writeJson(file, raw);
+    for (const c of list) if (fn(c, c.id)) hit = true;
+    if (hit) writeJson(file, list);
   });
 }
 
@@ -161,7 +161,7 @@ export function execStep(ctx, s) {
       if (d.run) {
         const r = spawnSync(d.run[0], d.run.slice(1), { cwd: cfg.paths.project, encoding: 'utf8', maxBuffer: 256e6, timeout: 45 * MIN, windowsHide: true });
         if (r.status !== 0) throw new Error(`${label(d.run)}: ${brief(r.stderr || r.stdout || r.error?.message || `exit ${r.status}`)}`);
-        if (d.sets) set[d.sets] = r.stdout.trim();
+        if (d.sets) set[d.sets] = /^\d+$/.test(r.stdout.trim()) ? Number(r.stdout.trim()) : r.stdout.trim();
         log(`run ok: ${label(d.run)}`);
       } else if (d.bg) {
         if (d.bg[0] !== process.execPath) throw new Error(`bg is not a node command: ${label(d.bg)}`);
@@ -226,16 +226,16 @@ export function reapDead(ctx) {
   for (const kind of DEPLOYS) {
     const file = `${state}/run-${kind}.json`, r = readJson(file, null);
     // A run that ended while the board was busy never closed its command: the run file is the record, a run older than the command is not.
-    const raw = readJson(P.commands, []), open = (Array.isArray(raw) ? raw : raw.docs ?? raw.documents ?? []).some(c => (c.data ?? c).action === kind && (c.data ?? c).status === 'running');
+    const open = readCommands(P.commands).some(c => c.action === kind && c.status === 'running');
     if (r && r.status !== 'running' && open) {
-      const ended = (r.ids ?? (r.of ? [r.of] : r.issues ?? [])).map(String);
+      const ended = idsOf(r);
       edit(c => c.action === kind && c.status === 'running' && ended.includes(String(c.jobId)) && Date.parse(r.endedAt) > Date.parse(c.runAt ?? 0) && Object.assign(c, { status: r.status === 'ok' ? 'done' : 'failed', doneAt: r.endedAt }));
     }
     if (r?.status !== 'running' || alive(r.pid, r.startedAt, 'node')) continue;
     const test = kind === 'deploy-test', endedAt = new Date().toISOString();
     const why = L('deploy.interrupted', { again: L(test && (r.tries ?? 1) < 3 ? 'deploy.retryTest' : 'deploy.clickAgain') });
     writeJson(file, { ...r, status: 'failed', endedAt, note: why, ...(test ? { transient: true } : {}) });
-    const ids = (r.ids ?? (r.of ? [r.of] : r.issues ?? [])).map(String), started = Date.parse(r.startedAt) - MIN;
+    const ids = idsOf(r), started = Date.parse(r.startedAt) - MIN;
     for (const id of ids) {
       const text = L(test ? 'deploy.testFailed' : 'deploy.failed', { why });
       if (/^\d+$/.test(id)) T.setJob(Number(id), {}, text, false);
