@@ -845,6 +845,26 @@ test('a build that left the paths of its tier goes to the owner instead of climb
   assert.equal(T.stepFor(job({ issue: 131, stage: 'build', tier: 'A' }), {}).step, 'build-retry');
 });
 
+test('a worktree nothing will use again is removed: merged without a deploy command, a closed PR, a redo from the spec', () => {
+  const C = mkEnv(CLAUDE_ONLY), at = later(-60e3);
+  mkdirSync(C.WT(140), { recursive: true });
+  const m = C.T.stepFor(job({ issue: 140, stage: 'merged', tier: 'A', stageSince: at }), {});
+  assert.equal(m.step, 'cleanup');
+  assert.equal(sh(m.do[0]).split(' ').slice(-2).join(' '), 'cleanup 140');
+  assert.deepEqual(C.T.stepFor(job({ issue: 140, stage: 'merged', tier: 'A', stageSince: at, cleanedAt: later(-30e3) }), {}), null);
+  assert.equal(C.T.stepFor(job({ issue: 140, stage: 'merged', tier: 'A', stageSince: later(-10e3), cleanedAt: at }), {}).step, 'cleanup');
+  assert.equal(C.T.stepFor(job({ issue: 141, stage: 'merged', tier: 'A', stageSince: at }), {}), null);
+  assert.equal(C.T.stepFor(job({ issue: 140, stage: 'failed', pr: 9, prState: 'closed', stageSince: at }), {}).step, 'cleanup');
+  assert.notEqual(C.T.stepFor(job({ issue: 140, stage: 'failed', pr: 9, prState: 'closed', stageSince: at, cleanedAt: later(-30e3) }), {})?.step, 'cleanup');
+  commands(C, [{ jobId: '140', action: 'redo', note: 'again' }]);
+  const [r] = C.T.commandSteps({ jobs: [job({ issue: 140, round: 0, stage: 'needs-you' })] }, {});
+  assert.equal(r.step, 'redo');
+  assert.equal(sh(r.do[0]).split(' ').slice(-2).join(' '), 'cleanup 140');
+  const withDeploy = mkEnv(MULTI);
+  mkdirSync(withDeploy.WT(142), { recursive: true });
+  assert.notEqual(withDeploy.T.stepFor(job({ issue: 142, stage: 'merged', tier: 'B', stageSince: at }), {})?.step, 'cleanup');
+});
+
 test('a round 2 reviewer is pointed only at the findings of its own kind; a kind that never ran reviews everything', () => {
   const C = mkEnv(CLAUDE_ONLY);
   put(`${C.J(9)}/build.md`, 'BUILD: OK\nExecutor: claude:sonnet\nUI: no\n');

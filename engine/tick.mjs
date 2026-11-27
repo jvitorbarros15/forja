@@ -203,7 +203,7 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
 
   const redo = (job, note, q) => {
     const n = job.issue;
-    if (!job.round) return { step: 'redo', set: { stage: 'spec', running: ['spec'], specRevised: false, paused: false, approved: false, retryAt: null }, do: [{ write: `${J(n)}/owner.md`, text: note }, agentDo('spec', job.specModel ?? modelOf(cfg.models.spec, q), job, ' Revise spec.md using owner.md.')], event: L('event.redoSpec') };
+    if (!job.round) return { step: 'redo', set: { stage: 'spec', running: ['spec'], specRevised: false, paused: false, approved: false, retryAt: null }, do: [...(existsSync(WT(n)) ? [{ run: call('cleanup', n) }] : []), { write: `${J(n)}/owner.md`, text: note }, agentDo('spec', job.specModel ?? modelOf(cfg.models.spec, q), job, ' Revise spec.md using owner.md.')], event: L('event.redoSpec') };
     const step = buildStep('redo', job, { stage: 'build', round: job.round + 1, fails: 0, reviews: {}, paused: false, approved: false, retryAt: null }, L('event.redoRound', { round: job.round + 1 }), q);
     step.do.unshift({ write: `${J(n)}/round-${job.round}/owner.md`, text: note });
     return step;
@@ -313,6 +313,9 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
       const x = field(read(`${dir}/build.md`), 'Executor') ?? job.entry;
       return x?.includes(':') ? { avoidVendor: parseEntry(x).vendor, avoidModel: parseEntry(x).model } : {};
     };
+    // A worktree nothing will use again (merged with no deploy to remove it, a closed PR) is removed once per stage; a redo makes it again.
+    const cleanup = () => existsSync(WT(n)) && !(Date.parse(job.cleanedAt ?? 0) > Date.parse(job.stageSince ?? 0))
+      ? { step: 'cleanup', set: { cleanedAt: new Date(now()).toISOString() }, do: [{ run: call('cleanup', n) }] } : null;
     const spec = read(`${dir}/spec.md`), tier = field(spec, 'TIER');
 
     switch (job.stage) {
@@ -440,7 +443,7 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
       }
 
       case 'failed':
-        return job.prState === 'merged' ? { step: 'merged', set: { stage: 'merged' }, event: L('event.mergedByOwner') } : advise();
+        return job.prState === 'merged' ? { step: 'merged', set: { stage: 'merged' }, event: L('event.mergedByOwner') } : (job.prState === 'closed' && cleanup()) || advise();
 
       case 'needs-you':
         if (job.prState === 'merged') return { step: 'merged', set: { stage: 'merged' }, event: L('event.mergedByOwner') };
@@ -449,7 +452,7 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
         return advise() ?? wait('owner');
 
       case 'merged': {
-        if (!cfg.checks.deploy) return null;
+        if (!cfg.checks.deploy) return cleanup();
         const d = readJson(runFile('deploy'), null);
         if (d?.status === 'running' && alive(d.pid, d.startedAt, 'node')) return wait('deploy');
         // A failed deploy leaves the card merged so the deploy button stays usable; no automatic retry.

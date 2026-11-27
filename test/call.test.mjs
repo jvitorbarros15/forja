@@ -502,6 +502,10 @@ test('the CLI logs calls, rejects unknown commands, wraps check and build in run
   assert.equal(cli('log', 'codex', '7', 'build').status, 0);
   assert.deepEqual(JSON.parse(rd(E.P.quota)).calls.map(c => [c.p, c.issue, c.kind]), [['codex', 7, 'build']]);
   assert.equal(cli('frobnicate', '7').status, 2);
+  const gone = job(E, 19);
+  assert.equal(cli('cleanup', '19').status, 0);
+  assert.equal(existsSync(gone), false);
+  assert.equal(cli('cleanup', '19').status, 0);
   const d = cli('deploy', '7');
   assert.equal(d.status, 1);
   assert.match(d.stderr, /no deploy command/);
