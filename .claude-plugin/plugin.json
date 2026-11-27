@@ -1,0 +1,6 @@
+{
+  "name": "forja",
+  "version": "0.1.0",
+  "description": "Issue-to-PR software factory with tiered reviews and a local dashboard",
+  "license": "MIT"
+}

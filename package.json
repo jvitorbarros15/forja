@@ -1,0 +1,14 @@
+{
+  "name": "forja",
+  "version": "0.1.0",
+  "description": "Issue-to-PR software factory with tiered reviews and a local dashboard",
+  "license": "MIT",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "forja",
+  "owner": {
+    "name": "João Vitor Barros"
+  },
+  "plugins": [
+    {
+      "name": "forja",
+      "source": "./",
+      "description": "Issue-to-PR software factory with tiered reviews and a local dashboard"
+    }
+  ]
+}
