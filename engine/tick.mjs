@@ -75,7 +75,8 @@ const STEP_WAIT = [1, 5, 15], CONFLICT = /conflict|conflito|not mergeable|cannot
 export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
   const P = paths(cfg), J = P.jobs, WT = P.wt, R = cfg.repo, ROLES = roles(cfg), MULTI = multiVendor(cfg), MAX = cfg.limits.rounds;
   const L = (k, v) => t(cfg.language, k, v), S = cfg.paths.state, runFile = kind => `${S}/run-${kind}.json`;
-  const CALL = `node "${cfg.paths.plugin}/engine/call.mjs" --project "${cfg.paths.project}"`;
+  // Steps carry argv arrays, never a shell string: ids, models and paths reach the program as they are.
+  const call = (...a) => [process.execPath, `${cfg.paths.plugin}/engine/call.mjs`, '--project', cfg.paths.project, ...a.map(String)];
   const cmds = aliases(cfg.language), triageOn = !!(cfg.vendors.ollama?.enabled && cfg.vendors.ollama.triageModel);
   const hm = at => new Date(at).toLocaleTimeString(cfg.language, { hour: '2-digit', minute: '2-digit' });
   const quota = () => readQuota(S, now());
@@ -83,7 +84,7 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
   const deferred = k => cfg.deferredReviews.includes(k);
   const choose = (chain, o, q) => pick(chain, { ...o, q, multiVendor: MULTI });
   const modelOf = (chain, q) => parseEntry(choose(chain, {}, q) ?? chain[0]).model;
-  const bg = (...a) => ({ bg: `${CALL} ${a.join(' ')}` });
+  const bg = (...a) => ({ bg: call(...a) });
   const protectedOf = id => field(read(`${J(id)}/build.md`), 'Protected') === 'yes';
 
   const LABEL = { spec: 'forja:spec', build: 'forja:build', review: 'forja:review', approve: 'forja:review', pr: 'forja:review', merged: 'forja:review', 'needs-you': 'forja:needs-you', failed: 'forja:needs-you', deployed: 'forja:done' };
@@ -185,7 +186,7 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
   const entryFor = (rung, q) => choose(cfg.models.build[rung], {}, q);
   const buildDo = (job, entry) => {
     if (!entry) return null;
-    return isClaude(entry) ? [{ run: `${CALL} setup ${job.issue}` }, agentDo('builder', parseEntry(entry).model, job)] : [bg('build', job.issue, entry, job.round)];
+    return isClaude(entry) ? [{ run: call('setup', job.issue) }, agentDo('builder', parseEntry(entry).model, job)] : [bg('build', job.issue, entry, job.round)];
   };
   // Every allowed entry of the chain being out of quota makes pick fall back to claude:sonnet, or null when Claude is held too: the job waits.
   const buildStep = (step, job, set, event, q) => {
@@ -202,9 +203,9 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
   };
 
   // Pinned to the head whose CI this tick read: a push after that makes gh refuse the merge.
-  const merge = job => ({ step: 'merge', after: true, set: { stage: 'merged' }, do: [{ run: `gh pr merge ${job.pr} -R ${R} --merge --delete-branch${/^[0-9a-f]{40}$/.test(job.prHead ?? '') ? ` --match-head-commit ${job.prHead}` : ''}` }], event: L('event.mergeDone') });
+  const merge = job => ({ step: 'merge', after: true, set: { stage: 'merged' }, do: [{ run: ['gh', 'pr', 'merge', String(job.pr), '-R', R, '--merge', '--delete-branch', ...(/^[0-9a-f]{40}$/.test(job.prHead ?? '') ? ['--match-head-commit', job.prHead] : [])] }], event: L('event.mergeDone') });
   const openPr = (job, approved) => ({
-    step: 'open-pr', after: true, set: { stage: 'pr', running: [], ...(approved ? { approved: true, paused: false, retryAt: null } : {}) }, do: [{ run: `${CALL} pr ${job.issue}`, sets: 'pr' }],
+    step: 'open-pr', after: true, set: { stage: 'pr', running: [], ...(approved ? { approved: true, paused: false, retryAt: null } : {}) }, do: [{ run: call('pr', job.issue), sets: 'pr' }],
     event: approved ? L('event.approvedOpenPr') : mergesAlone(job) ? L('event.openPrAuto') : L('event.openPrManual', { tier: job.tier }),
   });
   const mergesAlone = job => tierOf(cfg, job.tier)?.approval === 'auto' && !protectedOf(job.issue);
@@ -408,7 +409,7 @@ export function createTick(cfg, { gh = realGh, now = Date.now } = {}) {
           if (!job.round || job.round >= MAX) return fail(job, L(job.round ? 'need.ciFailedRounds' : 'need.ciFailed', { pr: job.pr, rounds: MAX }), L('action.ciFailed', { rounds: MAX }));
           // The CI error becomes the next round's note, so a red CI goes back to build without the owner.
           const s = buildStep('ci-redo', job, { stage: 'build', round: job.round + 1, fails: 0, reviews: {}, approved: false }, L('event.ciRedo', { pr: job.pr, round: job.round + 1 }), q);
-          s.do.unshift({ run: `${CALL} cilog ${n} ${job.round} ${job.pr}` });
+          s.do.unshift({ run: call('cilog', n, job.round, job.pr) });
           return s;
         }
         if (job.ci !== 'pass') return wait('ci');

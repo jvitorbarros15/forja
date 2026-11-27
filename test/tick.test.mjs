@@ -44,6 +44,7 @@ function mkEnv(json = MULTI, gh) {
 }
 const job = o => ({ round: 1, fails: 0, reviews: {}, running: [], events: [], since: past, tier: 'B', executor: 'small', entry: 'claude:haiku', ...o });
 const R = { code: { verdict: 'PASS' } };
+const sh = d => (d.bg ?? d.run).join(' ');
 const commands = (E, list) => put(E.P.commands, list.map((c, i) => ({ id: `c${i}`, status: 'pending', note: '', ...c })));
 // A build plus a code review written after it: what approve() and merge need.
 const reviewed = (E, n, extra = '') => { put(`${E.J(n)}/build.md`, `BUILD: OK\nRound: 1\nCommit: abc1234 Add x\n${extra}`); put(`${E.J(n)}/round-1/review-code.md`, 'VERDICT: PASS\nCommit: abc1234def\n'); };
@@ -140,7 +141,7 @@ test('while Claude is at its limit no Claude agent is launched; a retry time hol
   const q = T.quota();
   assert.equal(q.claude.limitedUntil, until);
   assert.equal(T.claudeHeld(q, { step: 'approve', do: [{ agent: 'approver' }] }), true);
-  assert.equal(T.claudeHeld(q, { step: 'check', do: [{ bg: 'node call.mjs check 1 claude:haiku 1' }] }), false);
+  assert.equal(T.claudeHeld(q, { step: 'check', do: [{ bg: [process.execPath, 'call.mjs', 'check', '1', 'claude:haiku', '1'] }] }), false);
   put(`${F}/quota.json`, { calls: [{ p: 'claude', at: now(), issue: 50, kind: 'security', limited: true, until: past }] });
   assert.equal(T.quota().claude.limitedUntil, null);
   assert.equal(T.claudeHeld(T.quota(), { step: 'approve', do: [{ agent: 'approver' }] }), false);
@@ -202,7 +203,7 @@ test('a failed card whose PR the owner merged becomes merged; the merge is pinne
   rv(17);
   const sha = 'a'.repeat(40), s = T.stepFor(job({ issue: 17, reviews: R, stage: 'pr', pr: 9, prState: 'open', ci: 'pass', tier: 'A', prHead: sha }), {});
   assert.equal(s.step, 'merge');
-  assert.match(s.do[0].run, new RegExp(`--match-head-commit ${sha}$`));
+  assert.match(sh(s.do[0]), new RegExp(`--match-head-commit ${sha}$`));
 });
 
 test('the doc recomputes the buttons from the current state', () => {
@@ -227,8 +228,8 @@ test('double approve on an open PR re-pushes the head once and never merges dire
   commands(E, [{ jobId: '7', action: 'approve' }, { jobId: '7', action: 'approve' }]);
   const steps = T.commandSteps(board, {});
   assert.deepEqual(steps.map(s => s.step), ['open-pr', 'refuse']);
-  assert.match(steps[0].do[0].run, / pr 7$/);
-  assert.ok(steps[0].do[0].run.startsWith('node '));
+  assert.match(sh(steps[0].do[0]), / pr 7$/);
+  assert.deepEqual(steps[0].do[0].run, [process.execPath, `${REPO}/engine/call.mjs`, '--project', E.project, 'pr', '7']);
   assert.equal(steps[0].set.approved, true);
   assert.equal(steps.filter(s => s.step === 'merge').length, 0);
 });
@@ -296,7 +297,7 @@ test('a deploy test starts by itself after a merge, once, and never next to anot
   put(run, { kind: 'deploy-test', pid: 1, startedAt: '2026-06-01T09:00:00.000Z', endedAt: '2026-06-01T09:10:00.000Z', status: 'ok' });
   const s = T.autoTest(board, []);
   assert.equal(s.step, 'deploy-test');
-  assert.match(s.do[0].bg, / deploy-test 64$/);
+  assert.match(sh(s.do[0]), / deploy-test 64$/);
   assert.equal(T.autoTest(board, [{ step: 'deploy' }]), null);
   assert.equal(T.autoTest(board, [{ step: 'deploy-test' }]), null);
   assert.equal(T.autoTest({ jobs: [job({ issue: 65, stage: 'build' })] }, []), null);
@@ -333,7 +334,7 @@ test('deferred reviews run only after the others pass, except in the last round'
   assert.deepEqual(Object.keys(built.set.reviews), ['code', 'ponytail', 'security', 'data']);
   assert.deepEqual(built.set.running, []);
   assert.equal(built.do.length, 1);
-  assert.match(built.do[0].bg, / review 70 code gemini:neon 1$/);
+  assert.match(sh(built.do[0]), / review 70 code gemini:neon 1$/);
   const j = job({ issue: 70, stage: 'review', tier: 'C', executor: 'medium', entry: 'claude:sonnet', reviews: built.set.reviews });
   put(`${J(70)}/run-review-code.json`, { kind: 'review-code', pid: process.pid, startedAt: now(), status: 'running' });
   assert.deepEqual(T.stepFor(j, {}), { wait: 'reviews' });
@@ -403,7 +404,7 @@ test('a red CI starts the next round with the CI log, then stops after the last 
   assert.equal(s.step, 'ci-redo');
   assert.equal(s.set.round, 2);
   assert.equal(s.set.approved, false);
-  assert.match(s.do[0].run, / cilog 40 1 9$/);
+  assert.match(sh(s.do[0]), / cilog 40 1 9$/);
   assert.equal(T.stepFor(job({ issue: 41, stage: 'pr', pr: 9, prState: 'open', ci: 'fail', round: 3 }), {}).step, 'fail');
 });
 
@@ -413,10 +414,10 @@ test('a crashed review relaunches once, then fails', () => {
   const s = T.stepFor(j, {});
   assert.equal(s.step, 'retry');
   assert.deepEqual(s.set.stepRetry, ['review-code@1']);
-  assert.match(s.do[0].bg, / review 42 code gemini:neon 1$/);
+  assert.match(sh(s.do[0]), / review 42 code gemini:neon 1$/);
   assert.equal(T.stepFor({ ...j, stepRetry: ['review-code@1'] }, {}).step, 'fail');
   const again = T.stepFor({ ...j, workers: [{ role: 'review-code', round: 1, model: 'gemini:neon', status: 'failed' }] }, {});
-  assert.match(again.do[0].bg, / review 42 code codex:sol 1$/);
+  assert.match(sh(again.do[0]), / review 42 code codex:sol 1$/);
 });
 
 test('approve is refused while reviews are pending', () => {
@@ -477,7 +478,7 @@ test('a tier raised to a strong-spec tier sends the spec to the strong model; a 
   put(`${J(95)}/triage.json`, { tier: 'B', bucket: 'factory', reason: 'logic', model: 'm', ms: 1 });
   const g = T.stepFor(job({ issue: 95, stage: 'spec', round: 0, tier: undefined }), {});
   assert.equal(g.step, 'goldfish');
-  assert.match(g.do[0].bg, / goldfish 95 gemini:hydrogen$/);
+  assert.match(sh(g.do[0]), / goldfish 95 gemini:hydrogen$/);
 });
 
 test('triage parsing is strict and takes any configured tier', () => {
@@ -499,7 +500,7 @@ test('advisor output keeps only a valid action and never recommends a refused ap
 test('an external vendor that hit its limit without a reset time waits an hour', () => {
   put(`${F}/quota.json`, { calls: [{ p: 'gemini', at: now(), issue: 50, kind: 'build', limited: true }] });
   assert.ok(Date.parse(T.quota().gemini.limitedUntil) > Date.now() + 50 * 60e3);
-  assert.equal(T.stepFor(job({ issue: 97, stage: 'build', executor: 'hard', entry: 'gemini:neon' }), T.quota()).do[0].bg.endsWith(' build 97 codex:sol 1'), true);
+  assert.equal(sh(T.stepFor(job({ issue: 97, stage: 'build', executor: 'hard', entry: 'gemini:neon' }), T.quota()).do[0]).endsWith(' build 97 codex:sol 1'), true);
   put(`${F}/quota.json`, { calls: [] });
 });
 
@@ -523,7 +524,7 @@ test('the build ladder retries once, escalates over the configured sizes and fai
   const up = T.stepFor({ ...j, fails: 1 }, {});
   assert.equal(up.set.executor, 'hard');
   assert.equal(up.set.fails, 0);
-  assert.match(up.do[0].bg, / build 99 gemini:neon 1$/);
+  assert.match(sh(up.do[0]), / build 99 gemini:neon 1$/);
   assert.equal(T.stepFor({ ...j, fails: 1, executor: 'hard' }, {}).step, 'fail');
 });
 
@@ -535,7 +536,7 @@ test('claude-only medium build runs the builder agent on sonnet', () => {
   assert.equal(s.set.executor, 'medium');
   assert.equal(s.set.entry, 'claude:sonnet');
   assert.deepEqual(s.set.running, ['builder']);
-  assert.match(s.do[0].run, / setup 1$/);
+  assert.match(sh(s.do[0]), / setup 1$/);
   assert.deepEqual({ ...s.do[1], prompt: undefined }, { agent: 'builder', model: 'sonnet', issue: 1, round: 1, out: `${C.J(1)}/builder.md`, cwd: C.cfg.paths.main, prompt: undefined });
 });
 
@@ -596,7 +597,7 @@ test('goldfish is skipped when only the spec model is available', () => {
   assert.ok(s.event.includes(t('en', 'event.goldfishSkipped')));
   const strong = C.T.stepFor(job({ issue: 5, stage: 'spec', round: 0, tier: undefined, specModel: 'opus' }), {});
   assert.equal(strong.step, 'goldfish');
-  assert.match(strong.do[0].bg, / goldfish 5 claude:sonnet$/);
+  assert.match(sh(strong.do[0]), / goldfish 5 claude:sonnet$/);
   const off = mkEnv({ ...CLAUDE_ONLY, goldfish: false });
   put(`${off.J(5)}/spec.md`, 'TIER: B\nEXECUTOR: small\nBRANCH: forja/5-x\n');
   const o = off.T.stepFor(job({ issue: 5, stage: 'spec', round: 0, tier: undefined, specModel: 'opus' }), {});
@@ -717,7 +718,7 @@ test('goldfish never uses the spec model, also with several vendors; none config
   const quotaChain = mkEnv({ ...MULTI, models: { ...MULTI.models, goldfish: ['gemini:hydrogen'] } });
   put(`${quotaChain.J(31)}/spec.md`, 'TIER: B\nEXECUTOR: small\nBRANCH: forja/x\n');
   const j = job({ issue: 31, stage: 'spec', round: 0, tier: undefined, specModel: 'sonnet' });
-  assert.match(quotaChain.T.stepFor(j, {}).do[0].bg, / goldfish 31 gemini:hydrogen$/);
+  assert.match(sh(quotaChain.T.stepFor(j, {}).do[0]), / goldfish 31 gemini:hydrogen$/);
   put(`${quotaChain.F}/quota.json`, { calls: [{ p: 'gemini', at: now(), issue: 1, kind: 'goldfish', limited: true, until: later(30 * 60e3) }] });
   assert.deepEqual(quotaChain.T.stepFor(j, quotaChain.T.quota()), { wait: 'quota' });
 });

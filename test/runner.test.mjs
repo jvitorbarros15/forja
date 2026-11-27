@@ -125,7 +125,7 @@ test('argError accepts valid --every and --issue and rejects the rest', () => {
 
 test('execStep write and run steps', () => {
   const E = mkEnv(), ctx = E.ctx();
-  const r = execStep(ctx, { issue: 3, step: 'open-pr', after: true, set: { stage: 'pr' }, event: 'PR opened', do: [{ write: `${E.J(3)}/round-1/owner.md`, text: 'fix it' }, { run: 'node -p 7', sets: 'pr' }] });
+  const r = execStep(ctx, { issue: 3, step: 'open-pr', after: true, set: { stage: 'pr' }, event: 'PR opened', do: [{ write: `${E.J(3)}/round-1/owner.md`, text: 'fix it' }, { run: [process.execPath, '-p', '7'], sets: 'pr' }] });
   assert.equal(r.ok, true);
   assert.equal(rd(`${E.J(3)}/round-1/owner.md`), 'fix it');
   const b = readJson(E.P.board).jobs[0];
@@ -133,7 +133,7 @@ test('execStep write and run steps', () => {
   assert.equal(b.pr, '7');
   assert.equal(b.events.at(-1).text, 'PR opened');
 
-  const bad = execStep(ctx, { issue: 3, step: 'open-pr', after: true, set: { stage: 'merged' }, do: [{ run: 'node -e "process.exit(2)"' }] });
+  const bad = execStep(ctx, { issue: 3, step: 'open-pr', after: true, set: { stage: 'merged' }, do: [{ run: [process.execPath, '-e', 'process.exit(2)'] }] });
   assert.equal(bad.retry, true);
   assert.equal(bad.ok, false);
   const after = readJson(E.P.board).jobs[0];
@@ -142,11 +142,11 @@ test('execStep write and run steps', () => {
   assert.ok(after.retryAt);
 });
 
-test('execStep sets deploy command running before the call and parses quoted bg paths', () => {
+test('execStep sets deploy command running before the call and passes bg arguments untouched', () => {
   const E = mkEnv(), seen = [];
   put(E.P.commands, [{ id: 'c1', status: 'pending', action: 'deploy', jobId: 'all' }]);
   const ctx = E.ctx({ launch: (_, argv) => { seen.push({ argv, status: readJson(E.P.commands)[0].status }); return { pid: 1 }; } });
-  const r = execStep(ctx, { issue: null, command: 'c1', step: 'deploy', after: true, do: [{ bg: 'node "C:/with space/engine/call.mjs" --project "C:/my proj" deploy 1 2' }] });
+  const r = execStep(ctx, { issue: null, command: 'c1', step: 'deploy', after: true, do: [{ bg: [process.execPath, 'C:/with space/engine/call.mjs', '--project', 'C:/my proj', 'deploy', '1', '2'] }] });
   assert.equal(r.ok, true);
   assert.deepEqual(seen, [{ argv: ['C:/with space/engine/call.mjs', '--project', 'C:/my proj', 'deploy', '1', '2'], status: 'running' }]);
   assert.equal(readJson(E.P.commands)[0].status, 'running');
@@ -268,4 +268,14 @@ test('a step whose board write hits a busy lock does not stop the cycle or lose 
   await cycle(E.ctx({ T }));
   assert.equal(rd(file), 'ran');
   assert.ok(E.logs.some(l => /step x #39 not recorded: board lock busy/.test(l)));
+});
+
+test('a run step passes every argument to the program as it is, with no shell in between', () => {
+  const E = mkEnv(), ctx = E.ctx(), tricky = 'x & echo hi | "q" %PATH% $(id) `id` ; ^ < >';
+  const r = execStep(ctx, { issue: 3, step: 'open-pr', after: true, set: { stage: 'pr' }, do: [{ run: [process.execPath, '-p', 'process.argv[1]', tricky], sets: 'pr' }] });
+  assert.equal(r.ok, true);
+  assert.equal(readJson(E.P.board).jobs[0].pr, tricky);
+  const bad = execStep(ctx, { issue: 3, step: 'x', after: true, do: [{ bg: ['sh', '-c', 'echo hi'] }] });
+  assert.equal(bad.ok, false);
+  assert.match(bad.note, /bg is not a node command/);
 });

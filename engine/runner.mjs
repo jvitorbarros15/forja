@@ -22,7 +22,8 @@ const stateDir = project => `${fwd(resolve(project))}/.forja/state`;
 const first = e => String(e?.message ?? e).split('\n')[0].slice(0, 200);
 const stamp = (...a) => [new Date().toISOString().slice(11, 19), ...a].join(' ');
 const asJson = o => JSON.stringify(o);
-const argvOf = cmd => [...cmd.matchAll(/"([^"]*)"|(\S+)/g)].map(m => m[1] ?? m[2]);
+// What a step runs without the node and script path in front: "setup 5", "gh pr merge 9 ...".
+const label = a => (i => (i < 0 ? a : a.slice(i + 2)).join(' '))(a.indexOf('--project')).slice(0, 60);
 
 export function loadCfg(project) {
   const cfg = loadConfig(project);
@@ -161,16 +162,16 @@ export function execStep(ctx, s) {
   try {
     for (const d of s.do ?? []) {
       if (d.run) {
-        const r = spawnSync(d.run, { cwd: cfg.paths.project, shell: true, encoding: 'utf8', maxBuffer: 256e6, timeout: 45 * MIN, windowsHide: true });
-        if (r.status !== 0) throw new Error(`${d.run.replace(/^node ("[^"]*"|\S+call\.mjs) (--project ("[^"]*"|\S+) )?/, '').slice(0, 60)}: ${brief(r.stderr || r.stdout || r.error?.message || `exit ${r.status}`)}`);
+        const r = spawnSync(d.run[0], d.run.slice(1), { cwd: cfg.paths.project, encoding: 'utf8', maxBuffer: 256e6, timeout: 45 * MIN, windowsHide: true });
+        if (r.status !== 0) throw new Error(`${label(d.run)}: ${brief(r.stderr || r.stdout || r.error?.message || `exit ${r.status}`)}`);
         if (d.sets) set[d.sets] = r.stdout.trim();
-        log(`run ok: ${d.run.slice(0, 90)}`);
+        log(`run ok: ${label(d.run)}`);
       } else if (d.bg) {
-        if (!d.bg.startsWith('node ')) throw new Error(`bg is not a node command: ${d.bg.slice(0, 60)}`);
-        const triage = d.bg.match(/ triage (\d+)\b/)?.[1];
+        if (d.bg[0] !== process.execPath) throw new Error(`bg is not a node command: ${label(d.bg)}`);
+        const k = d.bg.indexOf('--project') + 2, triage = d.bg[k] === 'triage' && /^\d+$/.test(d.bg[k + 1]) ? d.bg[k + 1] : null;
         // Without issue.md the triage reads nothing and answers tier "?".
         if (triage && !existsSync(`${P.jobs(triage)}/issue.md`)) writeIssue(ctx, Number(triage));
-        log(`bg pid ${ctx.launch(ctx, argvOf(d.bg).slice(1)).pid}: ${d.bg.slice(0, 90)}`);
+        log(`bg pid ${ctx.launch(ctx, d.bg.slice(1)).pid}: ${label(d.bg)}`);
       } else if (d.agent) { startAgent(ctx, s.issue, d); started.add(d); }
       else if (d.write) { mkdirSync(dirname(d.write), { recursive: true }); writeFileSync(d.write, d.text); log(`write ${d.write}`); }
       else if (d.notify) ctx.notify(d.notify);
@@ -199,8 +200,8 @@ function dryStep(ctx, s) {
   if (s.set) show('set', `${asJson(s.set)}${s.event ? ` --event ${s.event}` : ''}`);
   if (s.note) show('refuse', s.note);
   for (const d of s.do ?? []) {
-    if (d.run) show('run', `${d.run}${d.sets ? ` (sets ${d.sets})` : ''}`);
-    else if (d.bg) show('bg', d.bg);
+    if (d.run) show('run', `${d.run.join(' ')}${d.sets ? ` (sets ${d.sets})` : ''}`);
+    else if (d.bg) show('bg', d.bg.join(' '));
     else if (d.agent) show('agent', `${d.agent} (${d.model}) cwd ${d.cwd} -> ${d.out}; allow ${ROLES[d.agent].allow().join(' ')}`);
     else if (d.write) show('write', d.write);
     else if (d.notify) show('notify', d.notify);
