@@ -1,0 +1,71 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { IS_WIN, alive, killTree, spawnDetached, linkDir, notify } from '../engine/platform.mjs';
+
+const tmp = () => mkdtempSync(join(tmpdir(), 'forja-plat-'));
+
+test('alive is true for current process', () => {
+  assert.equal(alive(process.pid, new Date().toISOString()), true);
+});
+
+test('alive is false for pid started before boot', () => {
+  assert.equal(alive(process.pid, '2000-01-01T00:00:00Z'), false);
+});
+
+test('alive is false for dead pid', async () => {
+  const startedAt = new Date().toISOString();
+  const child = spawn(process.execPath, ['-e', ''], { stdio: 'ignore' });
+  await new Promise(r => child.on('close', r));
+  assert.equal(alive(child.pid, startedAt), false);
+});
+
+test('alive checks the image name when given', () => {
+  const startedAt = new Date().toISOString();
+  assert.equal(alive(process.pid, startedAt, IS_WIN ? 'node.exe' : 'node'), true);
+  assert.equal(alive(process.pid, startedAt, 'definitely-not-this.exe'), false);
+});
+
+test('killTree stops a detached child', async () => {
+  const startedAt = new Date().toISOString();
+  const child = spawnDetached(process.execPath, ['-e', 'setInterval(()=>{},1e3)']);
+  assert.equal(alive(child.pid, startedAt), true);
+  killTree(child.pid);
+  const end = Date.now() + 5000;
+  while (alive(child.pid, startedAt) && Date.now() < end) await new Promise(r => setTimeout(r, 100));
+  assert.equal(alive(child.pid, startedAt), false);
+});
+
+test('killTree never throws on a dead pid', () => {
+  killTree(2 ** 22 - 1);
+});
+
+test('spawnDetached appends output to logFile', async () => {
+  const dir = tmp(), logFile = join(dir, 'out.log');
+  const child = spawnDetached(process.execPath, ['-e', 'console.log("hello");console.error("oops")'], { logFile });
+  await new Promise(r => child.on('close', r));
+  const log = readFileSync(logFile, 'utf8');
+  assert.match(log, /hello/);
+  assert.match(log, /oops/);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('linkDir creates a usable link', () => {
+  const dir = tmp(), target = join(dir, 'target'), link = join(dir, 'link');
+  mkdirSync(target);
+  writeFileSync(join(target, 'f.txt'), 'content');
+  linkDir(target, link);
+  assert.equal(readFileSync(join(link, 'f.txt'), 'utf8'), 'content');
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('notify writes log line when desktop is false', () => {
+  const dir = tmp(), logFile = join(dir, 'notify.log');
+  notify('build done', { desktop: false, logFile });
+  assert.ok(existsSync(logFile));
+  assert.match(readFileSync(logFile, 'utf8'), /^\S+ build done\n$/);
+  rmSync(dir, { recursive: true, force: true });
+});
