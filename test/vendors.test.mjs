@@ -214,6 +214,14 @@ test('a .cmd shim rejects multi-line arguments instead of truncating them', { sk
   await assert.rejects(exec(bin, ['--x', 'y'.repeat(9000)]), /resolves to a \.cmd\/\.bat shim/);
 });
 
+test('a .cmd shim rejects arguments cmd.exe would read as syntax', { skip: !IS_WIN }, async () => {
+  const bin = shim(`"${process.execPath}" "${FAKE.replace(/\//g, '\\')}" %*`), marker = `${tmp()}/pwned.txt`;
+  for (const arg of ['a & echo x > ' + marker, 'a | b', '%PATH%', 'a ^ b', 'a < b', 'a > b', 'say "hi"', 'a\rb']) {
+    await assert.rejects(exec(bin, ['--x', arg]), /resolves to a \.cmd\/\.bat shim/, arg);
+  }
+  assert.equal(fs.existsSync(marker), false);
+});
+
 test('a .cmd shim passes single-line arguments intact', { skip: !IS_WIN }, async () => {
   const bin = shim(`"${process.execPath}" "${FAKE.replace(/\//g, '\\')}" %*`);
   const log = `${tmp()}/calls.jsonl`;

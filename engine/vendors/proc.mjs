@@ -4,8 +4,10 @@ import path from 'node:path';
 import { IS_WIN, killTree } from '../platform.mjs';
 
 const JS = /\.(mjs|cjs|js)$/i;
-const quote = (a) => (/^[\w./:=\\@%+,-]+$/.test(a) ? a : `"${a.replace(/"/g, '\\"')}"`);
+const quote = (a) => (/^[\w./:=\\@+,-]+$/.test(a) ? a : `"${a.replace(/"/g, '\\"')}"`);
 const SHELL_MAX = 8000;
+// cmd.exe reads these as syntax whatever the quoting, so an opaque shim can never take them.
+const CMD_META = /[%&|^<>"\r\n]/;
 
 export const tail = (s, n = 40) => String(s ?? '').trim().split('\n').slice(-n).join('\n');
 
@@ -32,8 +34,8 @@ export function exec(bin, args, { cwd, input = '', env, timeoutMs, onPid } = {})
     const file = resolveWin(bin) ?? bin, target = /\.(cmd|bat)$/i.test(file) ? shimTarget(file) : null;
     if (target) { cmd = JS.test(target) ? process.execPath : target; argv = JS.test(target) ? [target, ...args] : args; }
     else if (/\.(cmd|bat)$/i.test(file)) {
-      if (args.some((a) => /[\r\n]/.test(a)) || args.join(' ').length > SHELL_MAX) {
-        return Promise.reject(new Error(`${bin} resolves to a .cmd/.bat shim; multi-line or long arguments cannot pass through cmd.exe — set vendors.${path.basename(bin).replace(/\.\w+$/, '')}.bin to the .exe or .js entry`));
+      if (args.some((a) => CMD_META.test(a)) || args.join(' ').length > SHELL_MAX) {
+        return Promise.reject(new Error(`${bin} resolves to a .cmd/.bat shim; arguments with a line break, % & | ^ < > or a quote, or very long ones, cannot pass through cmd.exe — set vendors.${path.basename(bin).replace(/\.\w+$/, '')}.bin to the .exe or .js entry`));
       }
       shell = true; cmd = [file, ...args].map(quote).join(' '); argv = [];
     } else cmd = file;
