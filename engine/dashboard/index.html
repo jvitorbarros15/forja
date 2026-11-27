@@ -548,8 +548,9 @@ footer{margin-top:20px;font-size:12px;color:var(--muted)}
 <script>
 /* ---------- 13. Data: state, API, helpers ---------- */
 const $=id=>document.getElementById(id);
-const TOK=new URLSearchParams(location.search).get('t');
-const api=p=>p+(TOK?(p.includes('?')?'&':'?')+'t='+encodeURIComponent(TOK):'');
+const TOK=(()=>{const p=new URLSearchParams(location.search),v=p.get('t');if(v!==null){p.delete('t');const s=p.toString();try{history.replaceState(null,'',location.pathname+(s?'?'+s:'')+location.hash)}catch{}}return v})();
+const sse=p=>p+(TOK?(p.includes('?')?'&':'?')+'t='+encodeURIComponent(TOK):'');
+const api=(p,o={})=>fetch(p,TOK?{...o,headers:{...o.headers,'x-forja-token':TOK}}:o);
 let CFG=null,STR={},LOC='en',REPO='',RANK={};
 const t=(k,v)=>{const s=STR[k]??k;return v?s.replace(/\{(\w+)\}/g,(m,n)=>n in v?v[n]:m):s};
 // The only way anything reaches the page: strings become text nodes, never markup.
@@ -904,7 +905,7 @@ async function send(action,jobId,btn){
   if(sending.has(key))return;
   sending.add(key);btn?.classList.add('sending');btn?.setAttribute('aria-busy','true');
   try{
-    const r=await fetch(api('/api/commands'),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jobId,action,note})});
+    const r=await api('/api/commands',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jobId,action,note})});
     const o=await r.json().catch(()=>({}));
     sending.delete(key);
     if(!r.ok){toast('bad',t('ui.send.notSent',{name}),o.error||t('ui.send.refused'));return render()}
@@ -971,7 +972,7 @@ async function novaSend(e){
   const done=()=>{novaBusy=false;$('nGo').classList.remove('sending');$('nGo').disabled=false;$('nCancel').disabled=false;$('nGo').removeAttribute('aria-busy')};
   try{
     const intake=$('nF').checked;
-    const r=await fetch(api('/api/issues'),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({title,body,intake})});
+    const r=await api('/api/issues',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({title,body,intake})});
     const o=await r.json().catch(()=>({}));
     done();
     if(!r.ok){const m=o.error||t('ui.send.refused');novaErr(m);toast('bad',t('ui.new.notCreated'),m,9000);return}
@@ -994,7 +995,7 @@ async function triAsk(){
   if(key===triLast){$('tri').classList.remove('busy');return}
   triLast=key;triAc?.abort();const ac=triAc=new AbortController();
   try{
-    const r=await fetch(api('/api/triage'),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({title,body}),signal:ac.signal});
+    const r=await api('/api/triage',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({title,body}),signal:ac.signal});
     const o=await r.json().catch(()=>({}));
     if(ac.signal.aborted||!novaOpen)return;
     if(!r.ok||!(o.tier in RANK)){triLast='';$('tri').hidden=true;return}
@@ -1006,7 +1007,7 @@ async function triAsk(){
 
 /* ---------- 19. Queue and issues ---------- */
 let qBusy=false,qPoll=0,isF='all',isQ='',isMax=150,dragN=0,confOpen=false,confFrom=null,confDone=null;
-async function loadQueue(){try{const r=await fetch(api('/api/queue'));if(r.ok){qd=await r.json();renderQueue()}}catch{}}
+async function loadQueue(){try{const r=await api('/api/queue');if(r.ok){qd=await r.json();renderQueue()}}catch{}}
 function triChips(it){
   const tr=it.triage;
   if(tr)return [h('span',{class:'tier','data-r':(RANK[tr.tier]===0?'low':RANK[tr.tier]===Object.keys(RANK).length-1?'high':'mid'),title:t('ui.triage.tip',{tier:tr.tier})},tr.tier),tr.bucket==='supervisor'?h('span',{class:'chip OVR',title:t('ui.triage.supervisor')},t('ui.bucket.supervisor')):null];
@@ -1036,7 +1037,7 @@ async function qAct(action,number,index){
   if(qBusy)return false;
   qBusy=true;if(qd)renderQueue();
   try{
-    const r=await fetch(api('/api/queue'),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(index===undefined?{action,number}:{action,number,index})});
+    const r=await api('/api/queue',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(index===undefined?{action,number}:{action,number,index})});
     const o=await r.json().catch(()=>({}));
     qBusy=false;
     if(!r.ok){toast('bad',t('ui.queue.notChanged'),o.error||t('ui.send.refused'));renderQueue();if(view==='issues')loadIssues();return false}
@@ -1059,7 +1060,7 @@ async function qAct(action,number,index){
 async function loadIssues(refresh){
   if(refresh)$('iRefresh').disabled=true;
   try{
-    const r=await fetch(api('/api/issues'+(refresh?'?refresh=1':'')));const o=await r.json().catch(()=>({}));
+    const r=await api('/api/issues'+(refresh?'?refresh=1':''));const o=await r.json().catch(()=>({}));
     if(!r.ok){$('iWarn').hidden=false;$('iWarn').textContent=o.error||t('ui.issues.listFail');return}
     idata=o;if(!dragN)renderIssues();
     if(refresh)toast('deploy',t('ui.tab.issues'),t('ui.issues.count',{n:o.items.length}),3000);
@@ -1266,13 +1267,13 @@ function bindUi(){
   });
 }
 const live=on=>{$('live').classList.toggle('on',on);$('liveText').textContent=on?t('ui.live',{time:new Date().toLocaleTimeString(LOC,{hour:'2-digit',minute:'2-digit'})}):t('ui.offline')};
-async function loadJobs(){try{const r=await fetch(api('/api/jobs'));if(!r.ok)throw 0;jobs=(await r.json()).map(withId);watchJobs();watchDeploy();render()}catch{live(false)}}
-async function loadCmds(){try{const r=await fetch(api('/api/commands'));if(r.ok){cmds=await r.json();watchCmds();render()}}catch{}}
-async function loadDeploy(){try{const r=await fetch(api('/api/deploy'));if(r.ok){dep=await r.json();watchDeploy();render()}}catch{}}
-async function loadRunner(){try{showRunner(await (await fetch(api('/api/runner'))).json())}catch{$('runner').textContent=t('ui.runner.unknown')}}
+async function loadJobs(){try{const r=await api('/api/jobs');if(!r.ok)throw 0;jobs=(await r.json()).map(withId);watchJobs();watchDeploy();render()}catch{live(false)}}
+async function loadCmds(){try{const r=await api('/api/commands');if(r.ok){cmds=await r.json();watchCmds();render()}}catch{}}
+async function loadDeploy(){try{const r=await api('/api/deploy');if(r.ok){dep=await r.json();watchDeploy();render()}}catch{}}
+async function loadRunner(){try{showRunner(await (await api('/api/runner')).json())}catch{$('runner').textContent=t('ui.runner.unknown')}}
 function connect(){
   Promise.all([loadJobs().then(()=>live(true)),loadCmds(),loadDeploy(),loadRunner(),loadQueue()]).then(()=>{booted=true;sigBoard='';render()});
-  const es=new EventSource(api('/api/events')),on=fn=>e=>{let d;try{d=JSON.parse(e.data)}catch{return}fn(d)};
+  const es=new EventSource(sse('/api/events')),on=fn=>e=>{let d;try{d=JSON.parse(e.data)}catch{return}fn(d)};
   es.onopen=()=>{live(true);loadJobs();loadCmds();loadDeploy();loadRunner();loadQueue()};
   es.addEventListener('queue',()=>loadQueue());
   es.onerror=()=>live(false);
@@ -1287,7 +1288,7 @@ function connect(){
   setInterval(paintAll,1000);
 }
 async function boot(){
-  try{const r=await fetch(api('/api/config'));if(!r.ok)throw 0;CFG=await r.json()}catch{$('boardBody').replaceChildren(h('div',{class:'empty'},document.querySelector('meta[name="forja-boot-failed"]')?.content||'Forja'));return}
+  try{const r=await api('/api/config');if(!r.ok)throw 0;CFG=await r.json()}catch{$('boardBody').replaceChildren(h('div',{class:'empty'},document.querySelector('meta[name="forja-boot-failed"]')?.content||'Forja'));return}
   STR=CFG.strings||{};LOC=CFG.language||'en';REPO='https://github.com/'+CFG.repo;
   RANK=Object.fromEntries(CFG.tiers.map((x,i)=>[x.id,i]));
   document.documentElement.lang=LOC;

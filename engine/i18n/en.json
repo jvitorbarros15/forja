@@ -156,6 +156,7 @@
   "issue.bodyOmitted": "(body omitted: not written by an approver)",
   "server.badOrigin": "origin not allowed",
   "server.badHost": "host not allowed",
+  "server.badUrl": "Invalid URL.",
   "server.bootFailed": "The dashboard could not load its configuration. Reload the page; if it keeps failing, run /forja:doctor.",
   "server.token": "token required",
   "server.notFound": "not found",

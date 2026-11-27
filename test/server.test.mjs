@@ -1,4 +1,5 @@
 // The dashboard server on ephemeral ports, with gh and triage injected; nothing touches the network.
+import { EventEmitter } from 'node:events';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
@@ -6,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { Worker } from 'node:worker_threads';
 import { loadConfig } from '../engine/config.mjs';
 import { serve } from '../engine/server.mjs';
 import { paths } from '../engine/state.mjs';
@@ -25,7 +27,7 @@ const call = (port, method, path, { body, headers = {}, host = '127.0.0.1' } = {
   const r = http.request({ host, port, method, path, headers: { ...(data ? { 'content-type': 'application/json' } : {}), ...headers } }, res => {
     let text = '';
     res.on('data', c => { text += c; });
-    res.on('end', () => ok({ status: res.statusCode, text, json: () => JSON.parse(text) }));
+    res.on('end', () => ok({ status: res.statusCode, headers: res.headers, text, json: () => JSON.parse(text) }));
   });
   r.on('error', no);
   r.end(data);
@@ -183,6 +185,10 @@ test('a non-local host requires the token', async t => {
     assert.equal((await at('/api/jobs')).status, 401);
     assert.equal((await at('/api/jobs?t=wrong')).status, 401);
     assert.equal((await at('/api/jobs', { headers: { 'x-forja-token': 'wrong' } })).status, 401);
+    const flipped = s.token.slice(0, -1) + (s.token.endsWith('0') ? '1' : '0');
+    assert.equal((await at(`/api/jobs?t=${flipped}`)).status, 401);
+    assert.equal((await at('/api/jobs', { headers: { 'x-forja-token': flipped } })).status, 401);
+    assert.equal((await at(`/api/jobs?t=${encodeURIComponent('\u00e9'.repeat(s.token.length))}`)).status, 401);
     assert.equal((await at('/api/events')).status, 401);
     assert.equal((await at(`/api/jobs?t=${s.token}`)).status, 200);
     assert.equal((await at('/api/jobs', { headers: { 'x-forja-token': s.token } })).status, 200);
@@ -200,5 +206,102 @@ test('a board lock held too long answers 503 and the server keeps running', asyn
     assert.equal(r.status, 503);
     assert.match(r.json().error, /busy/i);
     assert.equal((await call(s.port, 'GET', '/api/jobs')).status, 200);
+  });
+});
+
+test('HTML and JSON responses include clickjacking and nosniff headers', async () => {
+  const page = `${mkdtempSync(`${tmpdir()}/forja-hdr-`)}/index.html`;
+  writeFileSync(page, '<h1>hi</h1>');
+  await withServer({}, { page }, async s => {
+    const html = await call(s.port, 'GET', '/');
+    assert.equal(html.status, 200);
+    assert.equal(html.headers['x-frame-options'], 'DENY');
+    assert.equal(html.headers['content-security-policy'], "frame-ancestors 'none'");
+    assert.equal(html.headers['x-content-type-options'], 'nosniff');
+    const api = await call(s.port, 'GET', '/api/jobs');
+    assert.equal(api.status, 200);
+    assert.equal(api.headers['x-content-type-options'], 'nosniff');
+    const miss = await call(s.port, 'GET', '/api/nope');
+    assert.equal(miss.status, 404);
+    assert.equal(miss.headers['x-content-type-options'], 'nosniff');
+  });
+});
+
+test('malformed URL returns 400 and watcher/SSE errors do not crash the server', async () => {
+  const watchers = [];
+  const watch = (_dir, cb) => { const w = new EventEmitter(); w.close = () => {}; w.trigger = f => cb('change', f); watchers.push(w); return w; };
+  await withServer({}, { watch }, async s => {
+    const bad = await call(s.port, 'GET', '//a:b/');
+    assert.equal(bad.status, 400);
+
+    await new Promise((ok, no) => {
+      const r = http.request({ host: '127.0.0.1', port: s.port, method: 'GET', path: '/api/events' }, res => {
+        res.once('data', () => { r.destroy(); ok(); });
+      });
+      r.on('error', () => {});
+      r.end();
+      setTimeout(() => no(new Error('sse timeout')), 3000).unref();
+    });
+    watchers[1].trigger('commands.json');
+    await new Promise(r => setTimeout(r, 220));
+
+    watchers[0].emit('error', Object.assign(new Error('EMFILE'), { code: 'EMFILE' }));
+    watchers[1].emit('error', Object.assign(new Error('ENOSPC'), { code: 'ENOSPC' }));
+    assert.equal((await call(s.port, 'GET', '/api/jobs')).status, 200);
+  });
+  await withServer({}, { watch: () => { throw new Error('EMFILE'); } }, async s => {
+    assert.equal((await call(s.port, 'GET', '/api/jobs')).status, 200);
+  });
+});
+
+test('mutateQueue performs full read-modify-write inside the queue lock', async () => {
+  const list = [{ number: 7, title: 'Add search', body: '', updatedAt: '2026-01-02', labels: [] }];
+  let ghHook = null;
+  const gh = async args => {
+    if (ghHook) { const fn = ghHook; ghHook = null; fn(); }
+    if (args[1] === 'list') return JSON.stringify(list);
+    throw new Error('unexpected');
+  };
+  await withServer({}, { gh }, async (s, E) => {
+    const og = { origin: `http://127.0.0.1:${s.port}` };
+    put(E.P.queue, []);
+    ghHook = () => put(E.P.queue, [7]);
+    const dup = await call(s.port, 'POST', '/api/queue', { body: { number: 7, action: 'add' }, headers: og });
+    assert.equal(dup.status, 409);
+
+    put(E.P.queue, [7, 8]);
+    put(`${E.P.queue}.lock`, String(process.pid));
+    const worker = new Worker(
+      `const fs = require('node:fs'), { workerData: d } = require('node:worker_threads');
+       setTimeout(() => { fs.writeFileSync(d.queue, JSON.stringify([9, 7, 8])); fs.rmSync(d.lock, { force: true }); }, 150);`,
+      { eval: true, workerData: { queue: E.P.queue, lock: `${E.P.queue}.lock` } }
+    );
+    const done = new Promise((ok, no) => { worker.once('exit', ok); worker.once('error', no); });
+    const res = await call(s.port, 'POST', '/api/queue', { body: { number: 8, action: 'remove' }, headers: og });
+    await done;
+    assert.equal(res.status, 200);
+    assert.deepEqual(JSON.parse(readFileSync(E.P.queue, 'utf8')), [9, 7]);
+  });
+});
+
+test('api/runner checks liveness asynchronously and caches within TTL', async () => {
+  let calls = 0;
+  const alive = async () => { calls++; await new Promise(r => setTimeout(r, 10)); return true; };
+  await withServer({}, { alive }, async (s, E) => {
+    const t1 = new Date().toISOString();
+    put(E.P.runner, { pid: process.pid, at: t1, waiting: [] });
+    const [a, b] = await Promise.all([call(s.port, 'GET', '/api/runner'), call(s.port, 'GET', '/api/runner')]);
+    assert.equal(a.json().alive, true);
+    assert.equal(b.json().alive, true);
+    assert.equal(calls, 1);
+
+    const c = await call(s.port, 'GET', '/api/runner');
+    assert.equal(c.json().alive, true);
+    assert.equal(calls, 1);
+
+    put(E.P.runner, { pid: process.pid + 1, at: new Date(Date.now() + 1000).toISOString(), waiting: [] });
+    const d = await call(s.port, 'GET', '/api/runner');
+    assert.equal(d.json().alive, true);
+    assert.equal(calls, 2);
   });
 });

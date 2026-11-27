@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { IS_WIN, alive, killOne, killTree, spawnDetached, linkDir, notify } from '../engine/platform.mjs';
+import { IS_WIN, alive, aliveAsync, killOne, killTree, spawnDetached, linkDir, notify } from '../engine/platform.mjs';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'forja-plat-'));
 
@@ -101,4 +101,15 @@ test('killOne stops the process and leaves its child alive', async () => {
 
 test('killOne ignores invalid pids', () => {
   for (const pid of [0, null, undefined, NaN, 1, -1, 'x']) killOne(pid);
+});
+
+test('aliveAsync checks current, pre-boot, dead, and image-named processes', async () => {
+  const now = new Date().toISOString();
+  assert.equal(await aliveAsync(process.pid, now), true);
+  assert.equal(await aliveAsync(process.pid, '2000-01-01T00:00:00Z'), false);
+  assert.equal(await aliveAsync(process.pid, now, 'node'), true);
+  assert.equal(await aliveAsync(process.pid, now, 'definitely-not-this'), false);
+  const child = spawn(process.execPath, ['-e', ''], { stdio: 'ignore' });
+  await new Promise(r => child.on('close', r));
+  assert.equal(await aliveAsync(child.pid, now), false);
 });

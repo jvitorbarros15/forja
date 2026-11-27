@@ -77,3 +77,32 @@ test('dashboard animates only new cards, guards SSE frames and a failed boot, an
   assert.match(html, /t\('ui\.dur\.ms'/);
   assert.doesNotMatch(html, /' ms'/);
 });
+
+test('dashboard strips ?t= from the URL and sends x-forja-token on fetch calls', () => {
+  const snippet = script.match(/const TOK=[\s\S]*?const api=[^\n]+/)?.[0];
+  assert.ok(snippet, 'TOK/sse/api helpers exist');
+  assert.doesNotMatch(script, /\bfetch\s*\(\s*api\s*\(/, 'fetch calls must go through api()');
+  assert.match(script, /new EventSource\(sse\('\/api\/events'\)\)/);
+  let replaced = null;
+  const calls = [];
+  const runWith = search => vm.runInNewContext(
+    `${snippet}; ({ TOK, sseUrl: sse('/api/events'), a: api('/api/jobs'), b: api('/api/commands', { method: 'POST', headers: { 'content-type': 'application/json' } }) })`,
+    {
+      URLSearchParams,
+      location: { pathname: '/', search, hash: '#top' },
+      history: { replaceState: (_s, _t, u) => { replaced = u; } },
+      fetch: (url, opts) => calls.push({ url, opts }),
+    }
+  );
+  const out = runWith('?foo=1&t=secret123');
+  assert.equal(out.TOK, 'secret123');
+  assert.equal(replaced, '/?foo=1#top');
+  assert.equal(out.sseUrl, '/api/events?t=secret123');
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)), [
+    { url: '/api/jobs', opts: { headers: { 'x-forja-token': 'secret123' } } },
+    { url: '/api/commands', opts: { method: 'POST', headers: { 'content-type': 'application/json', 'x-forja-token': 'secret123' } } },
+  ]);
+  replaced = null;
+  runWith('?t=only');
+  assert.equal(replaced, '/#top');
+});

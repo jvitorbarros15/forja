@@ -1,4 +1,4 @@
-import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { execFile, execFileSync, spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, closeSync, openSync, symlinkSync } from 'node:fs';
 import { uptime } from 'node:os';
 import { basename } from 'node:path';
@@ -6,6 +6,7 @@ import { basename } from 'node:path';
 export const IS_WIN = process.platform === 'win32';
 const BOOT = Date.now() - uptime() * 1e3;
 const run = (cmd, a) => execFileSync(cmd, a, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+const runAsync = (cmd, a) => new Promise((ok, no) => execFile(cmd, a, { encoding: 'utf8', windowsHide: true }, (e, out) => (e ? no(e) : ok(out))));
 // "node" also means whatever this node binary is called: a versioned or symlinked install shows up under that name.
 const namesOf = image => {
   const n = image?.replace(/\.exe$/i, '').toLowerCase();
@@ -24,6 +25,17 @@ export function alive(pid, startedAt, image) {
     if (IS_WIN) return taskIs(run('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH']).toLowerCase(), names);
     process.kill(pid, 0);
     return commIs(run('ps', ['-p', String(pid), '-o', 'comm=']), names);
+  } catch { return false; }
+}
+
+export async function aliveAsync(pid, startedAt, image) {
+  pid = Number(pid);
+  if (!(pid > 0) || new Date(startedAt).getTime() < BOOT) return false;
+  const names = namesOf(image);
+  try {
+    if (IS_WIN) return taskIs((await runAsync('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'])).toLowerCase(), names);
+    process.kill(pid, 0);
+    return commIs(await runAsync('ps', ['-p', String(pid), '-o', 'comm=']), names);
   } catch { return false; }
 }
 

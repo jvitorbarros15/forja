@@ -2,14 +2,14 @@
 //   node server.mjs --project <dir> [--port 4317] [--host 127.0.0.1]
 // A non-local host requires the token in state/.server-token. A busy port moves up to the next free one (20 tries).
 import { execFile } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, watch, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { strings, t } from './i18n.mjs';
-import { alive } from './platform.mjs';
+import { aliveAsync } from './platform.mjs';
 import { loadProjectConfig } from './config.mjs';
 import { idsOf, locked, paths, read, readJson, writeJson } from './state.mjs';
 import { ID_RE } from './tick.mjs';
@@ -17,11 +17,12 @@ import { chat } from './triage.mjs';
 
 const SELF = fileURLToPath(import.meta.url), PAGE = fileURLToPath(new URL('./dashboard/index.html', import.meta.url));
 const ACTIONS = ['approve', 'redo', 'deploy', 'deploy-test', 'pause', 'resume'], MAX_BODY = 4096, MAX_NOTE = 500, MAX_ISSUE_BODY = 64 * 1024;
-const QUEUE_ACTIONS = ['add', 'remove', 'up', 'down'], LOCAL_HOSTS = ['127.0.0.1', 'localhost', '::1'], LIST_TTL = 10 * 60e3, PORT_TRIES = 20;
+const QUEUE_ACTIONS = ['add', 'remove', 'up', 'down'], LOCAL_HOSTS = ['127.0.0.1', 'localhost', '::1'], LIST_TTL = 10 * 60e3, ALIVE_TTL = 5e3, PORT_TRIES = 20;
 const RUNS = { 'run-deploy.json': 'deploy', 'run-deploy-test.json': 'test' };
 
 const rj = (p, d) => { try { return readJson(p, d); } catch { return d; } };
-const json = (res, code, body) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(body)); };
+const json = (res, code, body) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' }); res.end(JSON.stringify(body)); };
+const eqToken = (a, b) => { if (typeof a !== 'string' || typeof b !== 'string') return false; const x = Buffer.from(a), y = Buffer.from(b); return x.length === y.length && timingSafeEqual(x, y); };
 const shown = host => (host.includes(':') ? `[${host}]` : host);
 const defaultGh = args => new Promise((ok, no) => execFile('gh', args, { timeout: 60e3, windowsHide: true, maxBuffer: 1 << 20 }, (e, out, err) => (e ? no(new Error(String(err || e.message).trim().slice(0, 300))) : ok(String(out).trim()))));
 const snippet = b => String(b ?? '').replace(/<[^>]*>|[`#*>_\[\]]/g, ' ').replace(/[\x00-\x1f\x7f]+|\s+/g, ' ').trim().slice(0, 200);
@@ -36,6 +37,7 @@ export function dashboardUrl(state) {
 export async function serve(cfg, o = {}) {
   const P = paths(cfg), state = cfg.paths.state, L = (k, v) => t(cfg.language, k, v), R = cfg.repo;
   const host = o.host ?? cfg.server.host, local = LOCAL_HOSTS.includes(host), gh = o.gh ?? defaultGh, page = o.page ?? PAGE;
+  const isAlive = o.alive ?? aliveAsync, watchFn = o.watch ?? watch;
   const triageOn = !!(o.triage || (cfg.vendors.ollama?.enabled && cfg.vendors.ollama.triageModel));
   const decide = o.triage ?? ((text, signal) => chat(cfg, text, signal));
   const runFile = f => `${state}/${f}`, QUEUE_MAX = cfg.queue.max, TCACHE = `${state}/triage-cache.json`;
@@ -50,10 +52,23 @@ export async function serve(cfg, o = {}) {
 
   const jobs = () => readdirSync(P.docs).filter(f => f.endsWith('.json')).map(f => rj(`${P.docs}/${f}`, null)).filter(Boolean);
   const commands = () => { const c = rj(P.commands, []); return Array.isArray(c) ? c : []; };
-  const runner = () => {
+  let aliveCache = { key: '', at: 0, val: false, pending: null };
+  async function runner() {
     const r = rj(P.runner, null);
-    return r ? { ...r, alive: alive(r.pid, r.at, 'node') } : null;
-  };
+    if (!r) return null;
+    const key = `${r.pid}:${r.at}`, now = Date.now();
+    if (aliveCache.key !== key || now - aliveCache.at >= ALIVE_TTL) {
+      if (!aliveCache.pending || aliveCache.key !== key) {
+        const p = Promise.resolve(isAlive(r.pid, r.at, 'node')).then(
+          val => { if (aliveCache.pending === p) aliveCache = { key, at: Date.now(), val, pending: null }; return val; },
+          () => { if (aliveCache.pending === p) aliveCache = { key, at: Date.now(), val: false, pending: null }; return false; }
+        );
+        aliveCache = { key, at: 0, val: false, pending: p };
+      }
+      return { ...r, alive: await aliveCache.pending };
+    }
+    return { ...r, alive: aliveCache.val };
+  }
   // What the page may know about the last deploy and the last deploy test: the plain note, never the raw output kept in `detail`.
   const deploys = () => Object.fromEntries(Object.entries(RUNS).map(([file, key]) => {
     const r = rj(runFile(file), null);
@@ -110,7 +125,6 @@ export async function serve(cfg, o = {}) {
   }
 
   const queueIds = () => { const q = rj(P.queue, []); return Array.isArray(q) ? q.filter(n => Number.isInteger(n) && n > 0) : []; };
-  const saveQueue = q => locked(P.queue, () => writeJson(P.queue, q));
   const factoryIssues = () => new Set(rj(P.board, { jobs: [] }).jobs.filter(j => Number.isInteger(Number(j.issue)) && !['merged', 'deployed'].includes(j.stage)).map(j => Number(j.issue)));
   const inFactory = i => i.labels.some(l => l === cfg.intakeLabel || l.startsWith('forja:'));
 
@@ -174,12 +188,18 @@ export async function serve(cfg, o = {}) {
       if (!i) return [404, { error: L('server.noIssue', { n }) }];
       if (inFactory(i)) return [409, { error: L('server.inFactory', { n, label: cfg.intakeLabel }) }];
     }
-    const q = queueIds(), at = q.indexOf(n);
-    if (action === 'add') { if (at < 0) q.splice(idx === undefined ? q.length : Math.min(idx, q.length), 0, n); }
-    else if (at < 0) return action === 'remove' ? [200, await queueView()] : [404, { error: L('server.notInQueue', { n }) }];
-    else if (action === 'remove') q.splice(at, 1);
-    else { const to = at + (action === 'up' ? -1 : 1); if (to >= 0 && to < q.length) [q[at], q[to]] = [q[to], q[at]]; }
-    saveQueue(q);
+    const err = locked(P.queue, () => {
+      const q = queueIds(), at = q.indexOf(n);
+      if (action === 'add') {
+        if (at >= 0) return [409, { error: L('server.inQueue', { n }) }];
+        q.splice(idx === undefined ? q.length : Math.min(idx, q.length), 0, n);
+      } else if (at < 0) return action === 'remove' ? null : [404, { error: L('server.notInQueue', { n }) }];
+      else if (action === 'remove') q.splice(at, 1);
+      else { const to = at + (action === 'up' ? -1 : 1); if (to >= 0 && to < q.length) [q[at], q[to]] = [q[to], q[at]]; }
+      writeJson(P.queue, q);
+      return null;
+    });
+    if (err) return err;
     return [200, await queueView()];
   }
 
@@ -239,7 +259,14 @@ export async function serve(cfg, o = {}) {
   }
 
   const clients = new Set();
-  const send = (event, data) => { for (const r of clients) r.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); };
+  const push = (r, chunk) => {
+    try { if (!r.destroyed && !r.writableEnded) r.write(chunk); else clients.delete(r); }
+    catch { clients.delete(r); try { r.destroy(); } catch {} }
+  };
+  const send = (event, data) => {
+    const chunk = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+    for (const r of [...clients]) push(r, chunk);
+  };
 
   const watched = ['board.json', 'commands.json', 'runner.json', 'queue.json', ...Object.keys(RUNS)], changed = new Set(), watchers = [];
   let timer = null;
@@ -250,41 +277,58 @@ export async function serve(cfg, o = {}) {
       if (f === 'board.json') send('board', {});
       else if (f === 'queue.json') send('queue', {});
       else if (f === 'commands.json') send('commands', commands());
-      else if (f === 'runner.json') send('runner', runner());
+      else if (f === 'runner.json') runner().then(r => send('runner', r)).catch(() => {});
       else if (RUNS[f]) send('deploy', deploys());
       else if (f.endsWith('.json')) { const d = rj(`${P.docs}/${f}`, null); if (d) send('job', d); }
     }
   }
   const bump = f => { if (f) { changed.add(String(f)); timer ??= setTimeout(flush, 150); } };
-  watchers.push(watch(P.docs, (_, f) => bump(f)), watch(state, (_, f) => { if (watched.includes(f)) bump(f); }));
-  const ping = setInterval(() => { for (const r of clients) r.write(': ping\n\n'); }, 25e3);
+  const watchDir = (dir, fn) => {
+    try {
+      const w = watchFn(dir, fn);
+      w.on('error', () => { try { w.close(); } catch {} });
+      watchers.push(w);
+    } catch {}
+  };
+  watchDir(P.docs, (_, f) => bump(f));
+  watchDir(state, (_, f) => { if (watched.includes(f)) bump(f); });
+  const ping = setInterval(() => { for (const r of [...clients]) push(r, ': ping\n\n'); }, 25e3);
   ping.unref();
 
   const server = createServer((req, res) => {
-    const url = new URL(req.url, 'http://x');
+    let url;
+    try { url = new URL(req.url, 'http://x'); } catch { return json(res, 400, { error: L('server.badUrl') }); }
     if (local) {
       const h = (req.headers.host ?? '').replace(/:\d+$/, '');
       if (!['127.0.0.1', 'localhost', '[::1]'].includes(h)) return json(res, 403, { error: L('server.badHost') });
     }
-    if (token && url.searchParams.get('t') !== token && req.headers['x-forja-token'] !== token) return json(res, 401, { error: L('server.token') });
+    if (token && !eqToken(url.searchParams.get('t'), token) && !eqToken(req.headers['x-forja-token'], token)) return json(res, 401, { error: L('server.token') });
     const get = req.method === 'GET', is = p => url.pathname === p;
 
     if (get && (is('/') || is('/index.html'))) {
       if (!existsSync(page)) return json(res, 404, { error: L('server.notFound') });
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+      res.writeHead(200, {
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': 'no-store',
+        'x-frame-options': 'DENY',
+        'content-security-policy': "frame-ancestors 'none'",
+        'x-content-type-options': 'nosniff',
+      });
       return res.end(readFileSync(page, 'utf8').replace('<meta charset="utf-8">', m => `${m}
 <meta name="forja-boot-failed" content="${L('server.bootFailed').replace(/[&"<>]/g, c => `&#${c.charCodeAt(0)};`)}">`));
     }
     if (get && is('/api/config')) return json(res, 200, config());
     if (get && is('/api/jobs')) return json(res, 200, jobs());
     if (get && is('/api/commands')) return json(res, 200, commands());
-    if (get && is('/api/runner')) return json(res, 200, runner());
+    if (get && is('/api/runner')) return runner().then(r => json(res, 200, r));
     if (get && is('/api/deploy')) return json(res, 200, deploys());
     if (get && is('/api/events')) {
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
-      res.write('retry: 3000\n\n');
+      res.on('error', () => clients.delete(res));
+      res.on('close', () => clients.delete(res));
       clients.add(res);
       req.on('close', () => clients.delete(res));
+      push(res, 'retry: 3000\n\n');
       return;
     }
     if (get && is('/api/issues')) return issuesView(url.searchParams.get('refresh') === '1').then(([c, b]) => json(res, c, b));
@@ -308,8 +352,9 @@ export async function serve(cfg, o = {}) {
   const close = () => {
     clearInterval(ping);
     clearTimeout(timer);
-    for (const w of watchers) w.close();
-    for (const r of clients) r.end();
+    for (const w of watchers) try { w.close(); } catch {}
+    for (const r of clients) try { r.end(); } catch {}
+    clients.clear();
     if (rj(`${state}/server.json`, null)?.pid === process.pid) rmSync(`${state}/server.json`, { force: true });
     return new Promise(ok => { server.close(ok); server.closeAllConnections(); });
   };

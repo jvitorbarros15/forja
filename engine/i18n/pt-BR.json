@@ -156,6 +156,7 @@
   "issue.bodyOmitted": "(corpo omitido: não foi escrito por um aprovador)",
   "server.badOrigin": "origem não permitida",
   "server.badHost": "host não permitido",
+  "server.badUrl": "URL inválida.",
   "server.bootFailed": "O painel não conseguiu carregar a configuração. Recarregue a página; se continuar falhando, rode /forja:doctor.",
   "server.token": "token necessário",
   "server.notFound": "não encontrado",
